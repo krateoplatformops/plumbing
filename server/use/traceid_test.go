@@ -27,8 +27,7 @@ func TestTraceIdMiddleware(t *testing.T) {
 
 	// Create a test request.
 	req := httptest.NewRequest("GET", "/", nil)
-	req.Header.Set(xcontext.LabelKrateoUser, "cyberjoker")
-	req.Header.Set(xcontext.LabelKrateoGroups, "devs,testers")
+
 	rec := httptest.NewRecorder()
 
 	// Serve the request.
