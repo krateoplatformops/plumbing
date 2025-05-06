@@ -2,10 +2,12 @@ package use
 
 import (
 	"net/http"
+	"strings"
 
 	"log/slog"
 
 	xcontext "github.com/krateoplatformops/plumbing/context"
+	"github.com/krateoplatformops/plumbing/jwtutil"
 	"github.com/krateoplatformops/plumbing/shortid"
 )
 
@@ -17,8 +19,20 @@ func Logger(root *slog.Logger) func(http.Handler) http.Handler {
 				traceId = shortid.MustGenerate()
 			}
 
-			sub := req.Header.Get("X-Krateo-User")
-			orgs := req.Header.Get("X-Krateo-Groups")
+			var (
+				sub  string
+				orgs string
+			)
+
+			authHeader := req.Header.Get("Authorization")
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 {
+				userInfo, err := jwtutil.ExtractUserInfo(parts[1])
+				if err == nil {
+					sub = userInfo.Username
+					orgs = strings.Join(userInfo.Groups, ",")
+				}
+			}
 
 			log := root
 			if len(sub) > 0 {

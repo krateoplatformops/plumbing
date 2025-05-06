@@ -2,32 +2,42 @@ package use
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	xcontext "github.com/krateoplatformops/plumbing/context"
 	"github.com/krateoplatformops/plumbing/endpoints"
-	"github.com/krateoplatformops/plumbing/env"
 	"github.com/krateoplatformops/plumbing/http/response"
+	"github.com/krateoplatformops/plumbing/jwtutil"
 	"github.com/krateoplatformops/plumbing/kubeutil"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
 )
 
-func UserConfig() func(http.Handler) http.Handler {
+func UserConfig(signingKey, authnNS string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(wri http.ResponseWriter, req *http.Request) {
-			sub := req.Header.Get(xcontext.LabelKrateoUser)
-			orgs := strings.Split(req.Header.Get(xcontext.LabelKrateoGroups), ",")
-
-			if len(sub) == 0 {
-				response.BadRequest(wri, fmt.Errorf("missing '%s' header", xcontext.LabelKrateoUser))
+			authHeader := req.Header.Get("Authorization")
+			if authHeader == "" {
+				response.Unauthorized(wri, fmt.Errorf("missing authorization header"))
 				return
 			}
 
-			if len(orgs) == 0 {
-				response.BadRequest(wri, fmt.Errorf("missing '%s' header", xcontext.LabelKrateoGroups))
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+				response.Unauthorized(wri, fmt.Errorf("invalid authorization header format"))
+				return
+			}
+
+			userInfo, err := jwtutil.Validate(signingKey, parts[1])
+			if err != nil {
+				if errors.Is(err, jwtutil.ErrTokenExpired) {
+					response.Unauthorized(wri, err)
+				} else {
+					response.Unauthorized(wri, err)
+				}
 				return
 			}
 
@@ -37,9 +47,9 @@ func UserConfig() func(http.Handler) http.Handler {
 				return
 			}
 
-			authnNS := env.String("AUTHN_NAMESPACE", "")
 			ep, err := endpoints.FromSecret(context.Background(), sarc,
-				fmt.Sprintf("%s-clientconfig", kubeutil.MakeDNS1123Compatible(sub)), authnNS)
+				fmt.Sprintf("%s-clientconfig",
+					kubeutil.MakeDNS1123Compatible(userInfo.Username)), authnNS)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					response.Unauthorized(wri, err)
@@ -49,7 +59,6 @@ func UserConfig() func(http.Handler) http.Handler {
 				return
 			}
 
-			// Store the *rest.Config in the context
 			ctx := xcontext.BuildContext(req.Context(),
 				xcontext.WithUserConfig(ep),
 			)

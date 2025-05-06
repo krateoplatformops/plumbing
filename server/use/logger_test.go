@@ -10,6 +10,7 @@ import (
 	"time"
 
 	xcontext "github.com/krateoplatformops/plumbing/context"
+	"github.com/krateoplatformops/plumbing/jwtutil"
 )
 
 func TestLoggerMiddleware(t *testing.T) {
@@ -32,10 +33,20 @@ func TestLoggerMiddleware(t *testing.T) {
 
 	route := NewChain(Logger(log)).Then(sillyHandler)
 
+	bearer, err := jwtutil.CreateToken(jwtutil.CreateTokenOptions{
+		Username:   "cyberjoker",
+		Groups:     []string{"devs", "testers"},
+		Duration:   time.Minute * 2,
+		SigningKey: "abbracadabbra",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Create a test request.
 	req := httptest.NewRequest("GET", "/", nil)
-	req.Header.Set(xcontext.LabelKrateoUser, "cyberjoker")
-	req.Header.Set(xcontext.LabelKrateoGroups, "devs,testers")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", bearer))
+
 	rec := httptest.NewRecorder()
 
 	// Serve the request.

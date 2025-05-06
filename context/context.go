@@ -18,8 +18,6 @@ const (
 
 const (
 	LabelKrateoTraceId = "X-Krateo-TraceId"
-	LabelKrateoUser    = "X-Krateo-User"
-	LabelKrateoGroups  = "X-Krateo-Groups"
 )
 
 func Logger(ctx context.Context) *slog.Logger {
