@@ -65,6 +65,11 @@ func UserInfo(ctx context.Context) (jwtutil.UserInfo, error) {
 	return ui, nil
 }
 
+func AccessToken(ctx context.Context) (string, bool) {
+	ui, ok := ctx.Value(contextKeyAccessToken).(string)
+	return ui, ok
+}
+
 func WithTraceId(traceId string) WithContextFunc {
 	return func(ctx context.Context) context.Context {
 		return context.WithValue(ctx, contextKeyTraceId, traceId)
@@ -99,6 +104,12 @@ func WithUserInfo(ui jwtutil.UserInfo) WithContextFunc {
 	}
 }
 
+func WithAccessToken(tok string) WithContextFunc {
+	return func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, contextKeyAccessToken, tok)
+	}
+}
+
 func BuildContext(ctx context.Context, opts ...WithContextFunc) context.Context {
 	for _, fn := range opts {
 		ctx = fn(ctx)
@@ -116,10 +127,11 @@ func (c contextKey) String() string {
 }
 
 var (
-	contextKeyTraceId    = contextKey("traceId")
-	contextKeyLogger     = contextKey("logger")
-	contextKeyUserConfig = contextKey("userConfig")
-	contextKeyUserInfo   = contextKey("userInfo")
-	contextKeyJQ         = contextKey("jq")
-	contextKeyAuthnNS    = contextKey("authnNS")
+	contextKeyTraceId     = contextKey("traceId")
+	contextKeyLogger      = contextKey("logger")
+	contextKeyUserConfig  = contextKey("userConfig")
+	contextKeyUserInfo    = contextKey("userInfo")
+	contextKeyJQ          = contextKey("jq")
+	contextKeyAuthnNS     = contextKey("authnNS")
+	contextKeyAccessToken = contextKey("accessToken")
 )
