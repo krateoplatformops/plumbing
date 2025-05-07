@@ -60,6 +60,7 @@ func UserConfig(signingKey, authnNS string) func(http.Handler) http.Handler {
 			}
 
 			ctx := xcontext.BuildContext(req.Context(),
+				xcontext.WithUserInfo(userInfo),
 				xcontext.WithUserConfig(ep),
 			)
 

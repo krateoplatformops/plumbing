@@ -8,6 +8,7 @@ import (
 
 	"github.com/krateoplatformops/plumbing/endpoints"
 	"github.com/krateoplatformops/plumbing/env"
+	"github.com/krateoplatformops/plumbing/jwtutil"
 	"github.com/krateoplatformops/plumbing/shortid"
 )
 
@@ -55,6 +56,15 @@ func UserConfig(ctx context.Context) (endpoints.Endpoint, error) {
 	return ep, nil
 }
 
+func UserInfo(ctx context.Context) (jwtutil.UserInfo, error) {
+	ui, ok := ctx.Value(contextKeyUserInfo).(jwtutil.UserInfo)
+	if !ok {
+		return jwtutil.UserInfo{}, fmt.Errorf("user info not found in context")
+	}
+
+	return ui, nil
+}
+
 func WithTraceId(traceId string) WithContextFunc {
 	return func(ctx context.Context) context.Context {
 		return context.WithValue(ctx, contextKeyTraceId, traceId)
@@ -83,6 +93,12 @@ func WithUserConfig(ep endpoints.Endpoint) WithContextFunc {
 	}
 }
 
+func WithUserInfo(ui jwtutil.UserInfo) WithContextFunc {
+	return func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, contextKeyUserInfo, ui)
+	}
+}
+
 func BuildContext(ctx context.Context, opts ...WithContextFunc) context.Context {
 	for _, fn := range opts {
 		ctx = fn(ctx)
@@ -103,6 +119,7 @@ var (
 	contextKeyTraceId    = contextKey("traceId")
 	contextKeyLogger     = contextKey("logger")
 	contextKeyUserConfig = contextKey("userConfig")
+	contextKeyUserInfo   = contextKey("userInfo")
 	contextKeyJQ         = contextKey("jq")
 	contextKeyAuthnNS    = contextKey("authnNS")
 )
