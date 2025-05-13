@@ -1,4 +1,4 @@
-package signup
+package certs
 
 import (
 	"context"
@@ -25,7 +25,7 @@ const (
 	resourceAnnotationKey        = "krateo.user.id"
 )
 
-func newPrivateKey() (*rsa.PrivateKey, error) {
+func NewPrivateKey() (*rsa.PrivateKey, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, fmt.Errorf("generating private key: %w", err)
@@ -34,16 +34,27 @@ func newPrivateKey() (*rsa.PrivateKey, error) {
 	return key, nil
 }
 
-func newCertificateRequest(key *rsa.PrivateKey, username string, groups []string) ([]byte, error) {
+type CertificateRequestOptions struct {
+	Key             *rsa.PrivateKey
+	Username        string
+	Groups          []string
+	ExtraExtensions []pkix.Extension
+}
+
+func NewCertificateRequest(opts CertificateRequestOptions) ([]byte, error) {
 	req := x509.CertificateRequest{
 		Subject: pkix.Name{
-			CommonName:   username,
-			Organization: groups,
+			CommonName:   opts.Username,
+			Organization: opts.Groups,
 		},
 		SignatureAlgorithm: x509.SHA256WithRSA,
+		ExtraExtensions:    []pkix.Extension{},
+	}
+	if len(opts.ExtraExtensions) > 0 {
+		req.ExtraExtensions = opts.ExtraExtensions
 	}
 
-	dat, err := x509.CreateCertificateRequest(rand.Reader, &req, key)
+	dat, err := x509.CreateCertificateRequest(rand.Reader, &req, opts.Key)
 	if err != nil {
 		return nil, fmt.Errorf("creating certificate request: %w", err)
 	}
@@ -53,7 +64,7 @@ func newCertificateRequest(key *rsa.PrivateKey, username string, groups []string
 	return enc, nil
 }
 
-func deleteCertificateSigningRequest(client kubernetes.Interface, name string) error {
+func DeleteCertificateSigningRequest(client kubernetes.Interface, name string) error {
 	err := client.CertificatesV1().CertificateSigningRequests().
 		Delete(context.Background(), name, metav1.DeleteOptions{})
 	if err != nil {
@@ -78,18 +89,18 @@ func deleteCertificateSigningRequest(client kubernetes.Interface, name string) e
 	return nil
 }
 
-func createCertificateSigningRequests(client kubernetes.Interface, csr *certv1.CertificateSigningRequest) error {
+func CreateCertificateSigningRequests(client kubernetes.Interface, csr *certv1.CertificateSigningRequest) error {
 	_, err := client.CertificatesV1().CertificateSigningRequests().
 		Create(context.Background(), csr, metav1.CreateOptions{})
 	return err
 }
 
-func approveCertificateSigningRequest(client kubernetes.Interface, csr *certv1.CertificateSigningRequest) error {
+func ApproveCertificateSigningRequest(client kubernetes.Interface, csr *certv1.CertificateSigningRequest, approver string) error {
 	cond := certv1.CertificateSigningRequestCondition{
 		Type:           certv1.CertificateApproved,
 		Status:         corev1.ConditionTrue,
 		Reason:         "CertificateApproved",
-		Message:        "Certificate was approved by authn-service",
+		Message:        fmt.Sprintf("Certificate was approved by %s", approver),
 		LastUpdateTime: metav1.Now(),
 	}
 
@@ -104,10 +115,10 @@ func approveCertificateSigningRequest(client kubernetes.Interface, csr *certv1.C
 	return nil
 }
 
-func waitForCertificate(client kubernetes.Interface, name string) error {
+func WaitForCertificate(client kubernetes.Interface, name string) error {
 	ctx := context.Background()
 	err := wait.PollUntilContextTimeout(ctx, certificateWaitPollInternval,
-		certificateWaitTimeout, false, certificateExistsFunc(client, name))
+		certificateWaitTimeout, false, CertificateExistsFunc(client, name))
 	if err != nil {
 		return fmt.Errorf("waiting for CSR certificate to be generated: %w", err)
 	}
@@ -115,7 +126,7 @@ func waitForCertificate(client kubernetes.Interface, name string) error {
 	return nil
 }
 
-func certificateExistsFunc(client kubernetes.Interface, name string) wait.ConditionWithContextFunc {
+func CertificateExistsFunc(client kubernetes.Interface, name string) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (bool, error) {
 		obj, err := client.CertificatesV1().CertificateSigningRequests().
 			Get(ctx, name, metav1.GetOptions{})
@@ -131,31 +142,65 @@ func certificateExistsFunc(client kubernetes.Interface, name string) wait.Condit
 	}
 }
 
-func certificate(client kubernetes.Interface, name string) ([]byte, error) {
+func Certificate(client kubernetes.Interface, name string) ([]byte, error) {
+	csr, err := GetCertificateSigningRequest(client, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return csr.Status.Certificate, nil
+}
+
+func GetCertificateSigningRequest(client kubernetes.Interface, name string) (*certv1.CertificateSigningRequest, error) {
 	csr, err := client.CertificatesV1().CertificateSigningRequests().
 		Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("getting CSR '%s': %w", name, err)
 	}
 
-	return csr.Status.Certificate, nil
+	return csr, nil
 }
 
-func newCertificateSigningRequest(csr []byte, dur time.Duration, userID, username string) *certv1.CertificateSigningRequest {
-	durationSeconds := int32(dur.Seconds())
+type CertificateSigningRequestOptions struct {
+	CSR        []byte
+	Duration   time.Duration
+	UserID     string
+	Username   string
+	SignerName string
+	Usages     []string
+}
+
+func NewCertificateSigningRequest(opts CertificateSigningRequestOptions) *certv1.CertificateSigningRequest {
+	if opts.SignerName == "" {
+		opts.SignerName = certv1.KubeAPIServerClientSignerName
+	}
+
+	if len(opts.Usages) == 0 {
+		opts.Usages = []string{string(certv1.UsageClientAuth)}
+	}
+
+	durationSeconds := int32(opts.Duration.Seconds())
 	csrObject := &certv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: username,
-			Annotations: map[string]string{
-				resourceAnnotationKey: userID,
-			},
+			Name: opts.Username,
 		},
 		Spec: certv1.CertificateSigningRequestSpec{
-			Request:           csr,
-			SignerName:        certv1.KubeAPIServerClientSignerName,
-			Usages:            []certv1.KeyUsage{certv1.UsageClientAuth},
+			Request:           opts.CSR,
+			SignerName:        opts.SignerName,
 			ExpirationSeconds: &durationSeconds,
 		},
 	}
+
+	csrObject.Spec.Usages = make([]certv1.KeyUsage, 0, len(opts.Usages))
+	for _, el := range opts.Usages {
+		csrObject.Spec.Usages = append(csrObject.Spec.Usages, certv1.KeyUsage(el))
+	}
+
+	if opts.UserID != "" {
+		csrObject.Annotations = map[string]string{
+			resourceAnnotationKey: opts.UserID,
+		}
+	}
+
 	return csrObject
 }

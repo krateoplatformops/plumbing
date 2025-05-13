@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/krateoplatformops/plumbing/certs"
 	"github.com/krateoplatformops/plumbing/endpoints"
 	"github.com/krateoplatformops/plumbing/kubeutil"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -112,44 +113,49 @@ type generateClientCertAndKeyOpts struct {
 }
 
 func generateClientCertAndKey(client kubernetes.Interface, o generateClientCertAndKeyOpts) (string, string, error) {
-	key, err := newPrivateKey()
+	key, err := certs.NewPrivateKey()
 	if err != nil {
 		return "", "", err
 	}
 
-	req, err := newCertificateRequest(key, o.username, o.groups)
+	req, err := certs.NewCertificateRequest(certs.CertificateRequestOptions{
+		Key: key, Username: o.username, Groups: o.groups,
+	})
 	if err != nil {
 		return "", "", err
 	}
 
-	csr := newCertificateSigningRequest(req, o.duration, o.userID, o.username)
+	csr := certs.NewCertificateSigningRequest(certs.CertificateSigningRequestOptions{
+		CSR: req, Duration: o.duration,
+		UserID: o.userID, Username: o.username,
+	})
 
-	err = createCertificateSigningRequests(client, csr)
+	err = certs.CreateCertificateSigningRequests(client, csr)
 	if err != nil {
 		if !errors.IsAlreadyExists(err) {
 			return "", "", fmt.Errorf("creating CSR kubernetes object: %w", err)
 		}
 
-		if err := deleteCertificateSigningRequest(client, csr.Name); err != nil {
+		if err := certs.DeleteCertificateSigningRequest(client, csr.Name); err != nil {
 			return "", "", fmt.Errorf("deleting existing CSR kubernetes object: %w", err)
 		}
 
-		if err := createCertificateSigningRequests(client, csr); err != nil {
+		if err := certs.CreateCertificateSigningRequests(client, csr); err != nil {
 			return "", "", fmt.Errorf("creating CSR kubernetes object: %w", err)
 		}
 	}
 
-	err = approveCertificateSigningRequest(client, csr)
+	err = certs.ApproveCertificateSigningRequest(client, csr, "authn")
 	if err != nil {
 		return "", "", err
 	}
 
-	err = waitForCertificate(client, csr.Name)
+	err = certs.WaitForCertificate(client, csr.Name)
 	if err != nil {
 		return "", "", err
 	}
 
-	crt, err := certificate(client, csr.Name)
+	crt, err := certs.Certificate(client, csr.Name)
 	if err != nil {
 		return "", "", err
 	}
