@@ -108,6 +108,22 @@ func TestEval(t *testing.T) {
 			want:    `{"compositionID":"AA-BB-CC"}`,
 			wantErr: false,
 		},
+		{
+			name:    "Iterate over null",
+			query:   ".allNamespacesAndCrds.status[]",
+			unquote: false,
+			data:    map[string]any{},
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name:    "Iterate over null gracefully (use empty builtin func)",
+			query:   ".allNamespacesAndCrds?.status?[]? // empty",
+			unquote: false,
+			data:    map[string]any{},
+			want:    "",
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
