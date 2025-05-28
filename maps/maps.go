@@ -6,42 +6,6 @@ import (
 	"strings"
 )
 
-func LeafPaths(m map[string]any, prefix string) []string {
-	var paths []string
-
-	for key, value := range m {
-		newPath := key
-		if prefix != "" {
-			newPath = prefix + "." + key
-		}
-
-		switch v := value.(type) {
-		case map[string]any:
-			paths = append(paths, LeafPaths(v, newPath)...)
-		case []any:
-			for i, item := range v {
-				itemPath := fmt.Sprintf("%s[%d]", newPath, i)
-				if subMap, ok := item.(map[string]any); ok {
-					paths = append(paths, LeafPaths(subMap, itemPath)...)
-				} else {
-					paths = append(paths, itemPath)
-				}
-			}
-		default:
-			paths = append(paths, newPath)
-		}
-	}
-
-	return paths
-}
-
-// ParsePath converts a "spec.containers[0].env[0].value" path to a string slice
-func ParsePath(path string) []string {
-	modifiedPath := strings.ReplaceAll(path, "[", ".")
-	modifiedPath = strings.ReplaceAll(modifiedPath, "]", "")
-	return strings.Split(modifiedPath, ".")
-}
-
 func NestedValue(obj map[string]any, fields []string) (any, bool) {
 	var current any = obj
 
@@ -157,6 +121,20 @@ func NestedSliceNoCopy(obj map[string]any, fields ...string) ([]any, bool, error
 			strings.Join(fields, "."), val, val)
 	}
 	return val.([]any), true, nil
+}
+
+// NestedFieldCopy returns a deep copy of the value of a nested field.
+// Returns false if the value is missing.
+// No error is returned for a nil field.
+//
+// Note: fields passed to this function are treated as keys within the passed
+// object; no array/slice syntax is supported.
+func NestedFieldCopy(obj map[string]any, fields ...string) (any, bool, error) {
+	val, found, err := nestedFieldNoCopy(obj, fields...)
+	if !found || err != nil {
+		return nil, found, err
+	}
+	return deepCopyJSONValue(val), true, nil
 }
 
 // NestedSlice returns a deep copy of []any value of a nested field.

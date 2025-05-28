@@ -72,55 +72,6 @@ func TestNestedFieldNoCopy(t *testing.T) {
 	assert.Nil(t, res)
 }
 
-func TestLeafPaths(t *testing.T) {
-	data := map[string]any{
-		"apiVersion": "v1",
-		"kind":       "Pod",
-		"metadata": map[string]any{
-			"name": "mypod",
-			"labels": map[string]any{
-				"app": "myapp",
-			},
-		},
-		"spec": map[string]any{
-			"containers": []any{
-				map[string]any{
-					"name":  "nginx",
-					"image": "nginx:latest",
-					"env": []any{
-						map[string]any{"name": "ENV_VAR", "value": "$(JQ_EXPRESSION)"},
-					},
-				},
-				map[string]any{
-					"name":  "nginx2",
-					"image": "nginx:latest",
-					"env": []any{
-						map[string]any{"name": "ENV_VAR_2", "value": "$(JQ_EXPRESSION)"},
-					},
-				},
-			},
-		},
-	}
-
-	paths := LeafPaths(data, "")
-	sort.Strings(paths)
-
-	assert.EqualValues(t, paths, []string{
-		"apiVersion",
-		"kind",
-		"metadata.labels.app",
-		"metadata.name",
-		"spec.containers[0].env[0].name",
-		"spec.containers[0].env[0].value",
-		"spec.containers[0].image",
-		"spec.containers[0].name",
-		"spec.containers[1].env[0].name",
-		"spec.containers[1].env[0].value",
-		"spec.containers[1].image",
-		"spec.containers[1].name",
-	})
-}
-
 func TestGetNestedValue(t *testing.T) {
 	data := map[string]any{
 		"apiVersion": "v1",
