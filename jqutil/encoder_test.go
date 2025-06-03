@@ -94,6 +94,7 @@ func TestEncoder_encodeString(t *testing.T) {
 		{"backslash\\test", "\"backslash\\\\test\""},
 		{"new\nline", "\"new\\nline\""},
 		{"tab\tcharacter", "\"tab\\tcharacter\""},
+		{"2025-06-03T11:37:32Z", "\"2025-06-03T11:37:32Z\""},
 	}
 
 	for _, tt := range tests {
