@@ -124,6 +124,22 @@ func TestEval(t *testing.T) {
 			want:    "",
 			wantErr: false,
 		},
+		{
+			name:    "Iterate Pods ",
+			query:   `.pods[0].metadata.creationTimestamp`,
+			unquote: false,
+			data: map[string]any{
+				"pods": []any{
+					map[string]any{
+						"metadata": map[string]any{
+							"creationTimestamp": "2025-06-03T11:37:32Z",
+						},
+					},
+				},
+			},
+			want:    `"2025-06-03T11:37:32Z"`,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -133,14 +149,15 @@ func TestEval(t *testing.T) {
 				Unquote: tt.unquote,
 				Data:    tt.data,
 			})
+			if got != tt.want {
+				t.Errorf("got: %v, want %v", got, tt.want)
+			}
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Eval() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
-			if got != tt.want {
-				t.Errorf("Eval() = %v, want %v", got, tt.want)
-			}
 		})
 	}
 }
