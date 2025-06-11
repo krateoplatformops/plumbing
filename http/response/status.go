@@ -82,6 +82,8 @@ const (
 	// Status code 415
 	StatusReasonUnsupportedMediaType StatusReason = "UnsupportedMediaType"
 
+	StatusUnprocessableEntity StatusReason = "UnprocessableEntity"
+
 	// StatusReasonInternalError indicates that an internal error occurred.
 	// Status code 500
 	StatusReasonInternalError StatusReason = "InternalError"
@@ -123,6 +125,9 @@ func New(code int, err error) *Status {
 	}
 
 	switch code {
+	case http.StatusUnprocessableEntity:
+		res.Status = StatusFailure
+		res.Reason = StatusUnprocessableEntity
 	case http.StatusUnauthorized:
 		res.Status = StatusFailure
 		res.Reason = StatusReasonUnauthorized
