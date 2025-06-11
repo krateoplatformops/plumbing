@@ -10,6 +10,7 @@ type Endpoint struct {
 	Username                 string `json:"username,omitempty"`
 	Password                 string `json:"password,omitempty"`
 	Debug                    bool   `json:"debug"`
+	Insecure                 bool   `json:"insecure"`
 }
 
 // HasCA returns whether the configuration has a certificate authority or not.

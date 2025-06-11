@@ -15,11 +15,11 @@ import (
 	"github.com/krateoplatformops/plumbing/endpoints"
 )
 
-func tlsConfigFor(authn *endpoints.Endpoint) (http.RoundTripper, error) {
+func tlsConfigFor(ep *endpoints.Endpoint) (http.RoundTripper, error) {
 	res := defaultTransport()
 
-	if authn.ProxyURL != "" {
-		u, err := parseProxyURL(authn.ProxyURL)
+	if ep.ProxyURL != "" {
+		u, err := parseProxyURL(ep.ProxyURL)
 		if err != nil {
 			return nil, err
 		}
@@ -27,16 +27,16 @@ func tlsConfigFor(authn *endpoints.Endpoint) (http.RoundTripper, error) {
 		res.Proxy = http.ProxyURL(u)
 	}
 
-	if !authn.HasCertAuth() {
+	if !ep.HasCertAuth() {
 		return res, nil
 	}
 
-	certData, err := base64.StdEncoding.DecodeString(authn.ClientCertificateData)
+	certData, err := base64.StdEncoding.DecodeString(ep.ClientCertificateData)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode client certificate data")
 	}
 
-	keyData, err := base64.StdEncoding.DecodeString(authn.ClientKeyData)
+	keyData, err := base64.StdEncoding.DecodeString(ep.ClientKeyData)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode client key data")
 	}
@@ -48,8 +48,8 @@ func tlsConfigFor(authn *endpoints.Endpoint) (http.RoundTripper, error) {
 
 	caCertPool := x509.NewCertPool()
 
-	if len(authn.CertificateAuthorityData) > 0 {
-		caData, err := base64.StdEncoding.DecodeString(authn.CertificateAuthorityData)
+	if len(ep.CertificateAuthorityData) > 0 {
+		caData, err := base64.StdEncoding.DecodeString(ep.CertificateAuthorityData)
 		if err != nil {
 			return nil, fmt.Errorf("unable to decode certificate authority data")
 		}
@@ -60,6 +60,10 @@ func tlsConfigFor(authn *endpoints.Endpoint) (http.RoundTripper, error) {
 	tlsConfig := &tls.Config{
 		RootCAs:      caCertPool,
 		Certificates: []tls.Certificate{cert},
+	}
+
+	if ep.Insecure {
+		tlsConfig.InsecureSkipVerify = true
 	}
 
 	res.TLSClientConfig = tlsConfig
