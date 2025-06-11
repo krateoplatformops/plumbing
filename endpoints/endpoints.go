@@ -65,6 +65,10 @@ func FromSecret(ctx context.Context, rc *rest.Config, name, namespace string) (E
 		res.Debug, _ = strconv.ParseBool(string(v))
 	}
 
+	if v, ok := sec.Data[insecureLabel]; ok {
+		res.Insecure, _ = strconv.ParseBool(string(v))
+	}
+
 	return res, nil
 }
 
@@ -82,6 +86,7 @@ func Store(ctx context.Context, rc *rest.Config, ns string, ep Endpoint) error {
 		serverUrlLabel:  ep.ServerURL,
 		proxyUrlLabel:   ep.ProxyURL,
 		debugLabel:      strconv.FormatBool(ep.Debug),
+		insecureLabel:   strconv.FormatBool(ep.Insecure),
 	}
 
 	cli, err := newSecretsRESTClient(rc)
@@ -110,4 +115,5 @@ const (
 	passwordLabel   = "password"
 	usernameLabel   = "username"
 	tokenLabel      = "token"
+	insecureLabel   = "insecure"
 )
