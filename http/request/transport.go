@@ -18,6 +18,13 @@ import (
 func tlsConfigFor(ep *endpoints.Endpoint) (http.RoundTripper, error) {
 	res := defaultTransport()
 
+	if ep.Insecure {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true,
+		}
+		res.TLSClientConfig = tlsConfig
+	}
+
 	if ep.ProxyURL != "" {
 		u, err := parseProxyURL(ep.ProxyURL)
 		if err != nil {
@@ -60,10 +67,6 @@ func tlsConfigFor(ep *endpoints.Endpoint) (http.RoundTripper, error) {
 	tlsConfig := &tls.Config{
 		RootCAs:      caCertPool,
 		Certificates: []tls.Certificate{cert},
-	}
-
-	if ep.Insecure {
-		tlsConfig.InsecureSkipVerify = true
 	}
 
 	res.TLSClientConfig = tlsConfig

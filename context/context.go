@@ -25,7 +25,7 @@ func Logger(ctx context.Context) *slog.Logger {
 	log, ok := ctx.Value(contextKeyLogger).(*slog.Logger)
 	if !ok {
 		log = slog.New(slog.NewJSONHandler(os.Stderr,
-			&slog.HandlerOptions{Level: slog.LevelInfo})).
+			&slog.HandlerOptions{Level: slog.LevelDebug})).
 			With("traceId", TraceId(ctx, false))
 	}
 
