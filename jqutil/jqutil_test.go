@@ -140,6 +140,24 @@ func TestEval(t *testing.T) {
 			want:    `"2025-06-03T11:37:32Z"`,
 			wantErr: false,
 		},
+		{
+			name: "With Custom JQ Function (shout)",
+			query: `import "utils" as u;
+  u::shout("jqutil")`,
+			unquote: false,
+			data:    map[string]any{},
+			want:    `"JQUTIL!!!"`,
+			wantErr: false,
+		},
+		{
+			name: "With Custom JQ Functions (flip",
+			query: `import "utils" as u;
+  u::flip("Luca S.")`,
+			unquote: false,
+			data:    map[string]any{},
+			want:    `"˙S ɐɔn˥"`,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -148,6 +166,8 @@ func TestEval(t *testing.T) {
 				Query:   tt.query,
 				Unquote: tt.unquote,
 				Data:    tt.data,
+				//ModuleLoader: newEmbedModuleLoader(),
+				ModuleLoader: DirModuleLoader("./assets/"),
 			})
 			if got != tt.want {
 				t.Errorf("got: %v, want %v", got, tt.want)

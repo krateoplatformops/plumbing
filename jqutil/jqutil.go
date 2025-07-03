@@ -11,9 +11,10 @@ import (
 )
 
 type EvalOptions struct {
-	Query   string
-	Unquote bool
-	Data    any
+	Query        string
+	Unquote      bool
+	Data         any
+	ModuleLoader gojq.ModuleLoader
 }
 
 func Eval(ctx context.Context, opts EvalOptions) (string, error) {
@@ -24,7 +25,19 @@ func Eval(ctx context.Context, opts EvalOptions) (string, error) {
 		return "", fmt.Errorf("invalid jq query %q: %w", opts.Query, err)
 	}
 
-	iter := query.RunWithContext(ctx, opts.Data)
+	comopts := []gojq.CompilerOption{}
+	if opts.ModuleLoader != nil {
+		comopts = append(comopts, gojq.WithModuleLoader(opts.ModuleLoader))
+	}
+	code, err := gojq.Compile(
+		query,
+		comopts...,
+	)
+	if err != nil {
+		return "", fmt.Errorf("unable to compile jq query %q: %w", opts.Query, err)
+	}
+
+	iter := code.RunWithContext(ctx, opts.Data)
 	for {
 		v, ok := iter.Next()
 		if !ok {
@@ -73,23 +86,6 @@ func ForEach(ctx context.Context, opts EvalOptions, action func(any) error) erro
 
 	return nil
 }
-
-/*
-func MaybeQuery(s string) (string, bool) {
-	start := strings.Index(s, "${")
-	if start == -1 {
-		return s, false
-	}
-
-	start += len("${")
-	end := strings.LastIndexByte(s[start:], '}')
-	if end == -1 {
-		return s, false
-	}
-
-	return strings.TrimSpace(s[start : start+end]), true
-}
-*/
 
 func MaybeQuery(s string) (string, bool) {
 	start := strings.Index(s, "${")
