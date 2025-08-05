@@ -58,7 +58,9 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 			if idx <= 0 {
 				continue
 			}
-			call.Header.Set(el[:idx], el[idx+1:])
+			key := el[:idx]
+			val := strings.TrimSpace(el[idx+1:])
+			call.Header.Set(key, val)
 		}
 	}
 
