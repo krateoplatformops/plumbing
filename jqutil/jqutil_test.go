@@ -141,18 +141,16 @@ func TestEval(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "With Custom JQ Function (shout)",
-			query: `import "utils" as u;
-  u::shout("jqutil")`,
+			name:    "With Custom JQ Function (shout)",
+			query:   `import "utils" as u; u::shout("jqutil")`,
 			unquote: false,
 			data:    map[string]any{},
 			want:    `"JQUTIL!!!"`,
 			wantErr: false,
 		},
 		{
-			name: "With Custom JQ Functions (flip",
-			query: `import "utils" as u;
-  u::flip("Luca S.")`,
+			name:    "With Custom JQ Functions (flip",
+			query:   `import "utils" as u; u::flip("Luca S.")`,
 			unquote: false,
 			data:    map[string]any{},
 			want:    `"˙S ɐɔn˥"`,
