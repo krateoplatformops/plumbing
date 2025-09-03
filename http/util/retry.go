@@ -8,7 +8,51 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/krateoplatformops/plumbing/env"
+	"golang.org/x/time/rate"
 )
+
+// NewRetryClient returns a RetryClient configured with retry and rate limiting
+// settings sourced from environment variables.
+//
+// Environment variables (with defaults):
+//
+//   - CLIENT_MAX_RETRIES (int, default: 5)
+//     Maximum number of retries before giving up.
+//
+//   - CLIENT_BASE_BACKOFF (duration, default: 500ms)
+//     Initial backoff duration for retries. The backoff grows exponentially.
+//
+//   - CLIENT_MAX_BACKOFF (duration, default: 10s)
+//     Maximum cap for the exponential backoff duration.
+//
+//   - CLIENT_QPS (float, default: 30.0)
+//     Average sustained queries per second allowed by the rate limiter.
+//
+//   - CLIENT_BURST (int, default: 45)
+//     Maximum burst of requests allowed before the limiter enforces QPS.
+//
+// The returned client retries failed requests (429 and 5xx) with exponential
+// backoff and jitter, and enforces request rate limiting using a token bucket.
+//
+// Example usage:
+//
+//	cli := &http.Client{Timeout: 30 * time.Second}
+//	retryCli := NewRetryClient(cli)
+//	resp, err := retryCli.Do(req)
+func NewRetryClient(cli *http.Client) *RetryClient {
+	return &RetryClient{
+		Client:      cli,
+		MaxRetries:  env.Int("CLIENT_MAX_RETRIES", 5),
+		BaseBackoff: env.Duration("CLIENT_BASE_BACKOFF", 500*time.Millisecond),
+		MaxBackoff:  env.Duration("CLIENT_MAX_BACKOFF", 10*time.Second),
+		Limiter: rate.NewLimiter(rate.Limit(
+			env.Float64("CLIENT_QPS", 30.0)),
+			env.Int("CLIENT_BURST", 45),
+		),
+	}
+}
 
 // RetryClient wraps an http.Client to add automatic retry on 429 and 5xx errors.
 type RetryClient struct {
@@ -16,6 +60,7 @@ type RetryClient struct {
 	MaxRetries  int
 	BaseBackoff time.Duration
 	MaxBackoff  time.Duration
+	Limiter     *rate.Limiter // controls QPS and Burst
 }
 
 // Do executes the request with retry logic only for idempotent methods.
@@ -23,14 +68,12 @@ func (rc *RetryClient) Do(req *http.Request) (*http.Response, error) {
 	if rc.Client == nil {
 		rc.Client = http.DefaultClient
 	}
-	if rc.MaxRetries == 0 {
-		rc.MaxRetries = 3
-	}
-	if rc.BaseBackoff == 0 {
-		rc.BaseBackoff = time.Second
-	}
-	if rc.MaxBackoff == 0 {
-		rc.MaxBackoff = 10 * time.Second
+
+	// enforce QPS/Burst limits
+	if rc.Limiter != nil {
+		if err := rc.Limiter.Wait(req.Context()); err != nil {
+			return nil, err
+		}
 	}
 
 	// Only retry idempotent HTTP methods

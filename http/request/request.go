@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	xcontext "github.com/krateoplatformops/plumbing/context"
 	"github.com/krateoplatformops/plumbing/endpoints"
@@ -73,16 +72,10 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 	}
 
 	// Wrap the existing client in a RetryClient
-	retryCli := &util.RetryClient{
-		Client:      cli,
-		MaxRetries:  5,                      // or configurable
-		BaseBackoff: 500 * time.Millisecond, // base backoff
-		MaxBackoff:  10 * time.Second,       // max backoff
-	}
+	retryCli := util.NewRetryClient(cli)
 
-	// Use RetryClient instead of the raw client
+	// Use RetryClient instead of the raw client  cli.Do(call)
 	respo, err := retryCli.Do(call)
-	//respo, err := cli.Do(call)
 	if err != nil {
 		return response.New(http.StatusInternalServerError, err)
 	}
