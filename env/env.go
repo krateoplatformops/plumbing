@@ -85,6 +85,19 @@ func Duration(key string, defaultValue time.Duration) time.Duration {
 	return res
 }
 
+func Float64(key string, defaultValue float64) float64 {
+	val, ok := os.LookupEnv(key)
+	if !ok {
+		return defaultValue
+	}
+
+	res, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+	if err != nil {
+		return defaultValue
+	}
+	return res
+}
+
 func ServicePort(key string, defaultValue int) int {
 	// "KRATEO_BFF_PORT=tcp://10.96.234.180:8081"
 	val, ok := os.LookupEnv(key)
