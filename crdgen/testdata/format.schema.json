@@ -1,0 +1,47 @@
+{
+  "title": "Hello Format Example",
+  "type": "object",
+  "properties": {
+    "greeting": {
+      "type": "string",
+      "description": "The text of the greeting message",
+      "examples": ["Hello, world!", "Hi there!"]
+    },
+    "display": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of times the message should be displayed",
+      "examples": [1, 3]
+    },
+    "verbose": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, show additional information"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://krateo.io",
+      "description": "A link associated with the greeting message"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the greeting was created",
+      "examples": ["2025-11-12T10:30:00Z"]
+    },
+    "senderEmail": {
+      "type": "string",
+      "format": "email",
+      "description": "Email address of the sender",
+      "examples": ["hello@krateo.io"]
+    },
+    "ipAddress": {
+      "type": "string",
+      "format": "ipv4",
+      "description": "The sender’s IPv4 address",
+      "examples": ["192.168.1.10"]
+    }
+  },
+  "required": ["greeting", "senderEmail"]
+}

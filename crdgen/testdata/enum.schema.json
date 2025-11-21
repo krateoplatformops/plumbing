@@ -1,0 +1,41 @@
+{
+"title": "Hello Enums Example",
+  "type": "object",
+  "properties": {
+    "greeting": {
+      "type": "string",
+      "description": "Il testo del messaggio di saluto"
+    },
+    "display": {
+      "type": "integer",
+      "default": 1,
+      "description": "Numero di volte da mostrare il messaggio"
+    },
+    "verbose": {
+      "type": "boolean",
+      "default": false,
+      "description": "Se true, mostra informazioni aggiuntive"
+    },
+    "url": {
+      "type": "string",
+      "default": "https://krateo.io",
+      "description": "Un link associato al messaggio"
+    },
+    "tone": {
+      "type": "string",
+      "description": "Il tono del messaggio di saluto",
+      "enum": ["formal", "friendly", "funny"],
+      "default": "friendly"
+    },
+    "languages": {
+      "type": "array",
+      "description": "Lingue disponibili per il messaggio di saluto",
+      "default": ["en"],
+      "items": {
+        "type": "string",
+        "enum": ["en", "it", "es", "fr"]
+      }
+    }
+  },
+  "required": ["greeting"]
+}

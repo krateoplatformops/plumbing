@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hello Nullable Example",
+  "type": "object",
+  "properties": {
+    "greeting": {
+      "type": "string",
+      "description": "The text of the greeting message"
+    },
+    "display": {
+      "type": ["integer", "null"],
+      "default": 1,
+      "description": "Number of times the message should be displayed (nullable)"
+    },
+    "verbose": {
+      "type": ["boolean", "null"],
+      "default": false,
+      "description": "If true, show additional information (nullable)"
+    },
+    "url": {
+      "type": ["string", "null"],
+      "default": "https://krateo.io",
+      "description": "A link associated with the greeting message (nullable)"
+    },
+    "tone": {
+      "type": ["string", "null"],
+      "description": "The tone of the greeting message",
+      "enum": ["formal", "friendly", "funny", null],
+      "default": "friendly"
+    }
+  },
+  "required": ["greeting"]
+}

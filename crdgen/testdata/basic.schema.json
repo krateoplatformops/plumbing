@@ -1,0 +1,23 @@
+{
+    "type": "object",
+    "properties": {
+      "greeting": {
+        "type": "string"
+      },
+      "display": {
+        "type": "integer",
+        "default": 1
+      },
+      "verbose": {
+        "type": "boolean",
+        "default": false
+      },
+      "url": {
+        "type": "string",
+        "default": "https://krateo.io"
+      }
+    },
+    "required": [
+      "greeting"
+    ]
+  }
