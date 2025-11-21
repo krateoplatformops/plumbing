@@ -1,0 +1,36 @@
+{
+  "title": "Hello Preserve Unknown Fields Example",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "greeting": {
+      "type": "string",
+      "description": "The text of the greeting message"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "An object with arbitrary unknown fields",
+      "additionalProperties": true
+    },
+    "spec": {
+      "type": "object",
+      "description": "A spec object with explicitly preserved unknown fields",
+      "x-kubernetes-preserve-unknown-fields": true
+    },
+    "dynamic": {
+      "type": "object",
+      "description": "An object with some known properties but allows extra fields",
+      "properties": {
+        "known": { "type": "string" }
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "emptyObject": {
+      "type": "object",
+      "description": "An empty object should preserve unknown fields"
+    }
+  },
+  "required": ["greeting"]
+}

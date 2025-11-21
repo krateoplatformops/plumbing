@@ -1,0 +1,28 @@
+{
+  "title": "ExampleSchema",
+  "type": "object",
+  "properties": {
+    "greeting": {
+      "title": "Greeting Message",
+      "type": "string"
+    },
+    "display": {
+      "title": "Display Mode",
+      "type": "integer",
+      "default": 1
+    },
+    "verbose": {
+      "title": "Verbose Mode",
+      "type": "boolean",
+      "default": false
+    },
+    "url": {
+      "title": "Service URL",
+      "type": "string",
+      "default": "https://krateo.io"
+    }
+  },
+  "required": [
+    "greeting"
+  ]
+}

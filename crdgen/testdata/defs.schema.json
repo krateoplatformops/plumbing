@@ -1,0 +1,47 @@
+{
+  "title": "Hello $defs Example",
+  "type": "object",
+  "properties": {
+    "greeting": {
+      "type": "string",
+      "description": "The text of the greeting message"
+    },
+    "sender": {
+      "$ref": "#/$defs/person"
+    },
+    "recipients": {
+      "type": "array",
+      "description": "List of recipients",
+      "items": {
+        "$ref": "#/$defs/person"
+      }
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    }
+  },
+  "required": ["greeting", "sender"],
+  "$defs": {
+    "person": {
+      "type": "object",
+      "description": "A person object with name and optional email",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Person's name"
+        },
+        "email": {
+          "type": ["string", "null"],
+          "format": "email",
+          "description": "Person's email address (nullable)"
+        }
+      },
+      "required": ["name"]
+    },
+    "metadata": {
+      "type": "object",
+      "description": "An arbitrary metadata object",
+      "additionalProperties": true
+    }
+  }
+}

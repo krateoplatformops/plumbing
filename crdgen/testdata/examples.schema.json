@@ -1,0 +1,57 @@
+{
+  "title": "Hello Examples Example",
+  "type": "object",
+  "properties": {
+    "greeting": {
+      "type": "string",
+      "description": "The text of the greeting message",
+      "examples": ["Hello, world!", "Hi there!", "Greetings, traveler!"]
+    },
+    "display": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of times the message should be displayed",
+      "examples": [1, 3, 5]
+    },
+    "verbose": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, show additional information",
+      "examples": [true, false]
+    },
+    "url": {
+      "type": "string",
+      "default": "https://krateo.io",
+      "description": "A link associated with the greeting message",
+      "examples": [
+        "https://krateo.io",
+        "https://example.com/hello",
+        "http://localhost:8080"
+      ]
+    },
+    "tone": {
+      "type": "string",
+      "description": "The tone of the greeting message",
+      "enum": ["formal", "friendly", "funny"],
+      "default": "friendly",
+      "examples": ["formal", "friendly"]
+    }
+  },
+  "required": ["greeting"],
+  "examples": [
+    {
+      "greeting": "Hello, world!",
+      "display": 1,
+      "verbose": false,
+      "url": "https://krateo.io",
+      "tone": "friendly"
+    },
+    {
+      "greeting": "Hi there!",
+      "display": 2,
+      "verbose": true,
+      "url": "https://example.com/hello",
+      "tone": "formal"
+    }
+  ]
+}
