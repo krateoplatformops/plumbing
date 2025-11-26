@@ -1,9 +1,15 @@
 package request
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"mime"
 	"net/http"
+	"sort"
 	"strings"
+	"time"
 )
 
 // cloneRequest creates a shallow copy of the request along with a deep copy of the Headers.
@@ -41,4 +47,119 @@ func isTextResponse(resp *http.Response) bool {
 		return false
 	}
 	return strings.HasPrefix(media, "text/")
+}
+
+func ComputeAwsHeader(opts RequestOptions) string {
+	ep := opts.Endpoint
+	// Docs:
+	// https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
+	// https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-auth-using-authorization-header.html
+	// https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
+
+	// Step 1: Determine date/time
+	var dateStamp, amzDate string
+	if len(ep.AwsTime) != 0 {
+		dateStamp = ep.AwsTime
+		// If AwsTime is just YYYYMMDD, construct full timestamp
+		if len(ep.AwsTime) == 8 {
+			amzDate = ep.AwsTime + "T000000Z"
+		} else {
+			amzDate = ep.AwsTime
+		}
+	} else {
+		t := time.Now().UTC()
+		dateStamp = t.Format("20060102")
+		amzDate = t.Format("20060102T150405Z")
+	}
+
+	host := opts.Endpoint.ServerURL
+	if host == "" {
+		host = "localhost"
+	}
+
+	canonicalURI := opts.Path
+	if canonicalURI == "" {
+		canonicalURI = "/"
+	}
+
+	// Step 2: Build headers
+	// Empty payload hash (SHA256 of empty string): "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*opts.Payload)))
+
+	headers := map[string]string{}
+
+	for _, v := range opts.Headers {
+		split := strings.Split(v, ":")
+		headers[strings.Trim(split[0], " ")] = strings.Trim(split[1], " ")
+	}
+
+	// Build canonical headers and signed headers list
+	var headerKeys []string
+	for k := range headers {
+		headerKeys = append(headerKeys, k)
+	}
+
+	// fmt.Printf("headerKeys: \n%s\n\n", headerKeys)
+	// fmt.Printf("Header: \n%s\n\n", opts.Headers)
+
+	sort.Strings(headerKeys)
+
+	var canonicalHeaders strings.Builder
+	for _, k := range headerKeys {
+		canonicalHeaders.WriteString(k)
+		canonicalHeaders.WriteString(":")
+		canonicalHeaders.WriteString(headers[k])
+		canonicalHeaders.WriteString("\n")
+	}
+
+	signedHeaders := strings.Join(headerKeys, ";")
+
+	// Step 3: Build canonical request
+	method := *opts.Verb
+	canonicalQueryString := ""
+
+	canonicalRequest := method + "\n" +
+		canonicalURI + "\n" +
+		canonicalQueryString + "\n" +
+		canonicalHeaders.String() + "\n" +
+		signedHeaders + "\n" +
+		payloadHash
+
+	// Step 4: Create string to sign
+	algorithm := "AWS4-HMAC-SHA256"
+	credentialScope := dateStamp + "/" + ep.AwsRegion + "/" + ep.AwsService + "/aws4_request"
+
+	hashedCanonicalRequest := fmt.Sprintf("%x", sha256.Sum256([]byte(canonicalRequest)))
+
+	stringToSign := algorithm + "\n" +
+		amzDate + "\n" +
+		credentialScope + "\n" +
+		hashedCanonicalRequest
+
+	// Step 5: Calculate signature
+	signingKey := getHMAC([]byte("AWS4"+ep.AwsSecretKey), []byte(dateStamp))
+	signingKey = getHMAC(signingKey, []byte(ep.AwsRegion))
+	signingKey = getHMAC(signingKey, []byte(ep.AwsService))
+	signingKey = getHMAC(signingKey, []byte("aws4_request"))
+
+	signature := getHMAC(signingKey, []byte(stringToSign))
+	signatureHex := hex.EncodeToString(signature)
+
+	// Step 6: Build authorization header
+	authorization := algorithm + " " +
+		"Credential=" + ep.AwsAccessKey + "/" + credentialScope + "," +
+		"SignedHeaders=" + signedHeaders + "," +
+		"Signature=" + signatureHex
+
+	// fmt.Printf("canonicalRequest \n%s\n\n", canonicalRequest)
+	// fmt.Printf("stringToSign \n%s\n\n", stringToSign)
+	// fmt.Printf("signatureHex \n%s\n\n", signatureHex)
+
+	return authorization
+}
+
+func getHMAC(key []byte, data []byte) []byte {
+	hash := hmac.New(sha256.New, key)
+	hash.Write(data)
+	return hash.Sum(nil)
 }

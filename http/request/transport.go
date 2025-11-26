@@ -177,3 +177,20 @@ func (rt *bearerAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	return rt.rt.RoundTrip(req)
 }
+
+type awsAuthRoundTripper struct {
+	headerPayload string
+	rt            http.RoundTripper
+}
+
+func (rt *awsAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if len(req.Header.Get("Authorization")) != 0 {
+		return rt.rt.RoundTrip(req)
+	}
+
+	req = cloneRequest(req)
+	token := rt.headerPayload
+
+	req.Header.Set("Authorization", token)
+	return rt.rt.RoundTrip(req)
+}

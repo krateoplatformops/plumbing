@@ -2,12 +2,15 @@ package request
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
+	"time"
 
 	xcontext "github.com/krateoplatformops/plumbing/context"
 	"github.com/krateoplatformops/plumbing/endpoints"
@@ -51,7 +54,45 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 	if err != nil {
 		return response.New(http.StatusInternalServerError, err)
 	}
-	call.Header.Set(xcontext.LabelKrateoTraceId, xcontext.TraceId(ctx, true))
+	// Additional headers for AWS Signature 4 algorithm
+	if opts.Endpoint.HasAwsAuth() {
+		var amzDate string
+		if len(opts.Endpoint.AwsTime) != 0 {
+			// If AwsTime is just YYYYMMDD, construct full timestamp
+			if len(opts.Endpoint.AwsTime) == 8 {
+				amzDate = opts.Endpoint.AwsTime + "T000000Z"
+			} else {
+				amzDate = opts.Endpoint.AwsTime
+			}
+		} else {
+			t := time.Now().UTC()
+			amzDate = t.Format("20060102T150405Z")
+		}
+		url, _ := url.Parse(opts.Endpoint.ServerURL)
+		host := url.Host
+		if host == "" {
+			host = "localhost"
+		}
+
+		canonicalURI := opts.Path
+		if canonicalURI == "" {
+			canonicalURI = "/"
+		}
+
+		// Step 2: Build headers
+		// Empty payload hash (SHA256 of empty string): "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+		payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*opts.Payload)))
+
+		headers := []string{
+			"host:" + host,
+			"x-amz-content-sha256:" + payloadHash,
+			"x-amz-date:" + amzDate,
+		}
+
+		opts.Headers = append(opts.Headers, headers...)
+		opts.Headers = append(opts.Headers, strings.ToLower(xcontext.LabelKrateoTraceId)+":"+xcontext.TraceId(ctx, true))
+		sort.Strings(opts.Headers)
+	}
 
 	if len(opts.Headers) > 0 {
 		for _, el := range opts.Headers {
@@ -65,7 +106,7 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 		}
 	}
 
-	cli, err := HTTPClientForEndpoint(opts.Endpoint)
+	cli, err := HTTPClientForEndpoint(opts)
 	if err != nil {
 		return response.New(http.StatusInternalServerError,
 			fmt.Errorf("unable to create HTTP Client for endpoint: %w", err))
