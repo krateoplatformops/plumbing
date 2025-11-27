@@ -78,7 +78,7 @@ func TestComputeAwsHeader(t *testing.T) {
 			AwsService:   "s3",
 			AwsTime:      "20130524",
 		},
-		RequestInfo: &RequestInfo{
+		RequestInfo: RequestInfo{
 			Headers: []string{
 				"range: bytes=0-9",
 			},
@@ -124,7 +124,7 @@ func TestComputeAwsHeader(t *testing.T) {
 
 	expected := "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request,SignedHeaders=host;range;x-amz-content-sha256;x-amz-date,Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41"
 
-	actual := ComputeAwsSignature(opts.Endpoint, opts.RequestInfo)
+	actual := ComputeAwsSignature(opts.Endpoint, &opts.RequestInfo)
 	if actual != expected {
 		t.Errorf("unexpected result in AWS signature computation: expected %s\ngot %s", expected, actual)
 	}

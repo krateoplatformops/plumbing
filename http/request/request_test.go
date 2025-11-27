@@ -26,7 +26,7 @@ func TestDo(t *testing.T) {
 				w.Write([]byte(`{"message": "success"}`))
 			},
 			opts: RequestOptions{
-				RequestInfo: &RequestInfo{
+				RequestInfo: RequestInfo{
 					Path: "/test",
 					Verb: ptr.To(http.MethodGet),
 				},
@@ -41,7 +41,7 @@ func TestDo(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			},
 			opts: RequestOptions{
-				RequestInfo: &RequestInfo{
+				RequestInfo: RequestInfo{
 					Path: "/invalid",
 					Verb: ptr.To(http.MethodGet),
 				},
@@ -55,7 +55,7 @@ func TestDo(t *testing.T) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
 			opts: RequestOptions{
-				RequestInfo: &RequestInfo{
+				RequestInfo: RequestInfo{
 					Path: "/error",
 					Verb: ptr.To(http.MethodGet),
 				},
@@ -75,7 +75,7 @@ func TestDo(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			},
 			opts: RequestOptions{
-				RequestInfo: &RequestInfo{
+				RequestInfo: RequestInfo{
 					Path:    "/post",
 					Verb:    ptr.To(http.MethodPost),
 					Payload: ptr.To(`{"key":"value"}`),

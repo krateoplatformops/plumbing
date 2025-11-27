@@ -20,7 +20,7 @@ import (
 const maxUnstructuredResponseTextBytes = 2048
 
 type RequestOptions struct {
-	*RequestInfo
+	RequestInfo
 	Endpoint        *endpoints.Endpoint
 	ResponseHandler func(io.ReadCloser) error
 	ErrorKey        string
@@ -58,7 +58,7 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 	}
 	// Additional headers for AWS Signature 4 algorithm
 	if opts.Endpoint.HasAwsAuth() {
-		headers := ComputeAwsHeaders(opts.Endpoint, opts.RequestInfo)
+		headers := ComputeAwsHeaders(opts.Endpoint, &opts.RequestInfo)
 		opts.Headers = append(opts.Headers, headers...)
 		opts.Headers = append(opts.Headers, strings.ToLower(xcontext.LabelKrateoTraceId)+":"+xcontext.TraceId(ctx, true))
 		sort.Strings(opts.Headers)
@@ -78,7 +78,7 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 		}
 	}
 
-	cli, err := HTTPClientForEndpoint(opts.Endpoint, opts.RequestInfo)
+	cli, err := HTTPClientForEndpoint(opts.Endpoint, &opts.RequestInfo)
 	if err != nil {
 		return response.New(http.StatusInternalServerError,
 			fmt.Errorf("unable to create HTTP Client for endpoint: %w", err))
