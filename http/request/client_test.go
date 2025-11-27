@@ -36,7 +36,7 @@ func TestHTTPClientForEndpoint(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := HTTPClientForEndpoint(&tc.ep)
+			client, err := HTTPClientForEndpoint(&tc.ep, nil)
 			if (err != nil) != tc.expectErr {
 				t.Errorf("unexpected error status: got %v, expectErr %v", err, tc.expectErr)
 			}

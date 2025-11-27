@@ -69,6 +69,22 @@ func FromSecret(ctx context.Context, rc *rest.Config, name, namespace string) (E
 		res.Insecure, _ = strconv.ParseBool(string(v))
 	}
 
+	if v, ok := sec.Data[awsAccessKeyLabel]; ok {
+		res.AwsAccessKey = string(v)
+	}
+
+	if v, ok := sec.Data[awsSecretKeyLabel]; ok {
+		res.AwsSecretKey = string(v)
+	}
+
+	if v, ok := sec.Data[awsRegionLabel]; ok {
+		res.AwsRegion = string(v)
+	}
+
+	if v, ok := sec.Data[awsServiceLabel]; ok {
+		res.AwsService = string(v)
+	}
+
 	return res, nil
 }
 
@@ -106,14 +122,18 @@ func Store(ctx context.Context, rc *rest.Config, ns string, ep Endpoint) error {
 }
 
 const (
-	clientCertLabel = "client-certificate-data"
-	clientKeyLabel  = "client-key-data"
-	caLabel         = "certificate-authority-data"
-	proxyUrlLabel   = "proxy-url"
-	serverUrlLabel  = "server-url"
-	debugLabel      = "debug"
-	passwordLabel   = "password"
-	usernameLabel   = "username"
-	tokenLabel      = "token"
-	insecureLabel   = "insecure"
+	clientCertLabel   = "client-certificate-data"
+	clientKeyLabel    = "client-key-data"
+	caLabel           = "certificate-authority-data"
+	proxyUrlLabel     = "proxy-url"
+	serverUrlLabel    = "server-url"
+	debugLabel        = "debug"
+	passwordLabel     = "password"
+	usernameLabel     = "username"
+	tokenLabel        = "token"
+	insecureLabel     = "insecure"
+	awsAccessKeyLabel = "aws-access-key"
+	awsSecretKeyLabel = "aws-secret-key"
+	awsRegionLabel    = "aws-region"
+	awsServiceLabel   = "aws-service"
 )

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	xcontext "github.com/krateoplatformops/plumbing/context"
@@ -19,14 +20,18 @@ import (
 const maxUnstructuredResponseTextBytes = 2048
 
 type RequestOptions struct {
-	Path            string
-	Verb            *string
-	Headers         []string
-	Payload         *string
+	RequestInfo
 	Endpoint        *endpoints.Endpoint
 	ResponseHandler func(io.ReadCloser) error
 	ErrorKey        string
 	ContinueOnError bool
+}
+
+type RequestInfo struct {
+	Path    string
+	Verb    *string
+	Headers []string
+	Payload *string
 }
 
 func Do(ctx context.Context, opts RequestOptions) *response.Status {
@@ -51,7 +56,15 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 	if err != nil {
 		return response.New(http.StatusInternalServerError, err)
 	}
-	call.Header.Set(xcontext.LabelKrateoTraceId, xcontext.TraceId(ctx, true))
+	// Additional headers for AWS Signature 4 algorithm
+	if opts.Endpoint.HasAwsAuth() {
+		headers := ComputeAwsHeaders(opts.Endpoint, &opts.RequestInfo)
+		opts.Headers = append(opts.Headers, headers...)
+		opts.Headers = append(opts.Headers, strings.ToLower(xcontext.LabelKrateoTraceId)+":"+xcontext.TraceId(ctx, true))
+		sort.Strings(opts.Headers)
+	} else {
+		call.Header.Set(xcontext.LabelKrateoTraceId, xcontext.TraceId(ctx, true))
+	}
 
 	if len(opts.Headers) > 0 {
 		for _, el := range opts.Headers {
@@ -65,7 +78,7 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 		}
 	}
 
-	cli, err := HTTPClientForEndpoint(opts.Endpoint)
+	cli, err := HTTPClientForEndpoint(opts.Endpoint, &opts.RequestInfo)
 	if err != nil {
 		return response.New(http.StatusInternalServerError,
 			fmt.Errorf("unable to create HTTP Client for endpoint: %w", err))

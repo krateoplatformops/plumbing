@@ -7,7 +7,7 @@ import (
 	"github.com/krateoplatformops/plumbing/endpoints"
 )
 
-func HTTPClientForEndpoint(ep *endpoints.Endpoint) (*http.Client, error) {
+func HTTPClientForEndpoint(ep *endpoints.Endpoint, ex *RequestInfo) (*http.Client, error) {
 	rt, err := tlsConfigFor(ep)
 	if err != nil {
 		return &http.Client{
@@ -22,10 +22,22 @@ func HTTPClientForEndpoint(ep *endpoints.Endpoint) (*http.Client, error) {
 		}
 	}
 
-	// Set authentication wrappers
+	// Set authentication wrapper
+	// Only one can be active at a time
+	countTrue := 0
+	if ep.HasBasicAuth() {
+		countTrue += 1
+	}
+	if ep.HasTokenAuth() {
+		countTrue += 1
+	}
+	if ep.HasAwsAuth() {
+		countTrue += 1
+	}
+
 	switch {
-	case ep.HasBasicAuth() && ep.HasTokenAuth():
-		return nil, fmt.Errorf("username/password or bearer token may be set, but not both")
+	case countTrue > 1:
+		return nil, fmt.Errorf("only one of username/password, bearer token and AWS must be set")
 
 	case ep.HasTokenAuth():
 		rt = &bearerAuthRoundTripper{
@@ -38,6 +50,16 @@ func HTTPClientForEndpoint(ep *endpoints.Endpoint) (*http.Client, error) {
 			username: ep.Username,
 			password: ep.Password,
 			rt:       rt,
+		}
+
+	case ep.HasAwsAuth():
+		if ex == nil {
+			return nil, fmt.Errorf("extra request options required for AWS authentication")
+		} else {
+			rt = &awsAuthRoundTripper{
+				headerPayload: ComputeAwsSignature(ep, ex),
+				rt:            rt,
+			}
 		}
 	}
 

@@ -26,8 +26,10 @@ func TestDo(t *testing.T) {
 				w.Write([]byte(`{"message": "success"}`))
 			},
 			opts: RequestOptions{
-				Path:     "/test",
-				Verb:     ptr.To(http.MethodGet),
+				RequestInfo: RequestInfo{
+					Path: "/test",
+					Verb: ptr.To(http.MethodGet),
+				},
 				Endpoint: &endpoints.Endpoint{ServerURL: "http://example.com"},
 			},
 			expectedStatus: http.StatusNoContent,
@@ -39,8 +41,10 @@ func TestDo(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			},
 			opts: RequestOptions{
-				Path:     "/invalid",
-				Verb:     ptr.To(http.MethodGet),
+				RequestInfo: RequestInfo{
+					Path: "/invalid",
+					Verb: ptr.To(http.MethodGet),
+				},
 				Endpoint: &endpoints.Endpoint{ServerURL: "http://example.com"},
 			},
 			expectedStatus: http.StatusNotAcceptable,
@@ -51,8 +55,10 @@ func TestDo(t *testing.T) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
 			opts: RequestOptions{
-				Path:     "/error",
-				Verb:     ptr.To(http.MethodGet),
+				RequestInfo: RequestInfo{
+					Path: "/error",
+					Verb: ptr.To(http.MethodGet),
+				},
 				Endpoint: &endpoints.Endpoint{ServerURL: "http://example.com"},
 			},
 			expectedStatus: http.StatusInternalServerError,
@@ -69,9 +75,11 @@ func TestDo(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			},
 			opts: RequestOptions{
-				Path:     "/post",
-				Verb:     ptr.To(http.MethodPost),
-				Payload:  ptr.To(`{"key":"value"}`),
+				RequestInfo: RequestInfo{
+					Path:    "/post",
+					Verb:    ptr.To(http.MethodPost),
+					Payload: ptr.To(`{"key":"value"}`),
+				},
 				Endpoint: &endpoints.Endpoint{ServerURL: "http://example.com"},
 			},
 			expectedStatus: http.StatusNoContent,

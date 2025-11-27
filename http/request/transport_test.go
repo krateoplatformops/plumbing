@@ -117,7 +117,7 @@ func TestHTTPSCallWithInsecureSkipVerify(t *testing.T) {
 		ServerURL: server.URL,
 	}
 
-	client, err := HTTPClientForEndpoint(endpoint)
+	client, err := HTTPClientForEndpoint(endpoint, nil)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint.ServerURL, nil)
@@ -151,7 +151,7 @@ func TestHTTPSCallFailsWithoutInsecureSkipVerify(t *testing.T) {
 		ServerURL: server.URL,
 	}
 
-	client, err := HTTPClientForEndpoint(endpoint)
+	client, err := HTTPClientForEndpoint(endpoint, nil)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint.ServerURL, nil)
@@ -186,13 +186,13 @@ func TestHTTPSCallSucceedsWithoutInsecureSkipVerify(t *testing.T) {
 		ClientKeyData:            clientKeyBase64,
 	}
 
-	client, err := HTTPClientForEndpoint(endpoint)
+	client, err := HTTPClientForEndpoint(endpoint, nil)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint.ServerURL, nil)
 	require.NoError(t, err)
 
-	resp, err := client.Do(req)
+	resp, _ := client.Do(req)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.Fatalf("unexpected status code: %d", resp.StatusCode)
 	}

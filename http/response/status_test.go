@@ -22,10 +22,12 @@ func TestAsMap(t *testing.T) {
 				Code:       200,
 			},
 			expect: map[string]any{
-				"status":  "Success",
-				"message": "Operation completed successfully",
-				"reason":  "None",
-				"code":    float64(200),
+				"apiVersion": "v1",
+				"kind":       "Example",
+				"status":     "Success",
+				"message":    "Operation completed successfully",
+				"reason":     "None",
+				"code":       float64(200),
 			},
 		},
 		{

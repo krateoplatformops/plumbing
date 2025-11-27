@@ -1,8 +1,13 @@
 package request
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/krateoplatformops/plumbing/endpoints"
 )
 
 func TestCloneRequest(t *testing.T) {
@@ -56,4 +61,72 @@ func TestIsTextResponse(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComputeAwsHeader(t *testing.T) {
+	// Data from documentation example
+	// https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
+	payload := ""
+	verb := "GET"
+
+	opts := RequestOptions{
+		Endpoint: &endpoints.Endpoint{
+			ServerURL:    "examplebucket.s3.amazonaws.com",
+			AwsAccessKey: "AKIAIOSFODNN7EXAMPLE",
+			AwsSecretKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			AwsRegion:    "us-east-1",
+			AwsService:   "s3",
+			AwsTime:      "20130524",
+		},
+		RequestInfo: RequestInfo{
+			Headers: []string{
+				"range: bytes=0-9",
+			},
+			Path:    "/test.txt",
+			Payload: &payload,
+			Verb:    &verb,
+		},
+	}
+
+	var amzDate string
+	if len(opts.Endpoint.AwsTime) != 0 {
+		// If AwsTime is just YYYYMMDD, construct full timestamp
+		if len(opts.Endpoint.AwsTime) == 8 {
+			amzDate = opts.Endpoint.AwsTime + "T000000Z"
+		} else {
+			amzDate = opts.Endpoint.AwsTime
+		}
+	} else {
+		t := time.Now().UTC()
+		amzDate = t.Format("20060102T150405Z")
+	}
+	host := opts.Endpoint.ServerURL
+	if host == "" {
+		host = "localhost"
+	}
+
+	canonicalURI := opts.Path
+	if canonicalURI == "" {
+		canonicalURI = "/"
+	}
+
+	// Step 2: Build headers
+	// Empty payload hash (SHA256 of empty string): "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*opts.Payload)))
+
+	headers := []string{
+		"host:" + host,
+		"x-amz-content-sha256:" + payloadHash,
+		"x-amz-date:" + amzDate,
+	}
+
+	opts.Headers = append(opts.Headers, headers...)
+
+	expected := "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request,SignedHeaders=host;range;x-amz-content-sha256;x-amz-date,Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41"
+
+	actual := ComputeAwsSignature(opts.Endpoint, &opts.RequestInfo)
+	if actual != expected {
+		t.Errorf("unexpected result in AWS signature computation: expected %s\ngot %s", expected, actual)
+	}
+
 }
