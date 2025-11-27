@@ -111,16 +111,16 @@ func TestHTTPSCallWithInsecureSkipVerify(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	ep := &endpoints.Endpoint{
+	endpoint := &endpoints.Endpoint{
 		Debug:     false,
 		Insecure:  true,
 		ServerURL: server.URL,
 	}
 
-	client, err := HTTPClientForEndpoint(ep, nil)
+	client, err := HTTPClientForEndpoint(endpoint, nil)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodGet, ep.ServerURL, nil)
+	req, err := http.NewRequest(http.MethodGet, endpoint.ServerURL, nil)
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
@@ -145,16 +145,16 @@ func TestHTTPSCallFailsWithoutInsecureSkipVerify(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	ep := &endpoints.Endpoint{
+	endpoint := &endpoints.Endpoint{
 		Debug:     false,
 		Insecure:  false,
 		ServerURL: server.URL,
 	}
 
-	client, err := HTTPClientForEndpoint(ep, nil)
+	client, err := HTTPClientForEndpoint(endpoint, nil)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodGet, ep.ServerURL, nil)
+	req, err := http.NewRequest(http.MethodGet, endpoint.ServerURL, nil)
 	require.NoError(t, err)
 
 	_, err = client.Do(req)
@@ -177,7 +177,7 @@ func TestHTTPSCallSucceedsWithoutInsecureSkipVerify(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	ep := &endpoints.Endpoint{
+	endpoint := &endpoints.Endpoint{
 		Debug:                    false,
 		Insecure:                 false,
 		ServerURL:                server.URL,
@@ -186,10 +186,10 @@ func TestHTTPSCallSucceedsWithoutInsecureSkipVerify(t *testing.T) {
 		ClientKeyData:            clientKeyBase64,
 	}
 
-	client, err := HTTPClientForEndpoint(ep, nil)
+	client, err := HTTPClientForEndpoint(endpoint, nil)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodGet, ep.ServerURL, nil)
+	req, err := http.NewRequest(http.MethodGet, endpoint.ServerURL, nil)
 	require.NoError(t, err)
 
 	resp, _ := client.Do(req)
