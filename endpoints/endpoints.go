@@ -132,8 +132,8 @@ const (
 	usernameLabel     = "username"
 	tokenLabel        = "token"
 	insecureLabel     = "insecure"
-	awsAccessKeyLabel = "awsAccessKey"
-	awsSecretKeyLabel = "awsSecretKey"
-	awsRegionLabel    = "awsRegion"
-	awsServiceLabel   = "awsService"
+	awsAccessKeyLabel = "aws-access-key"
+	awsSecretKeyLabel = "aws-secret-key"
+	awsRegionLabel    = "aws-region"
+	awsServiceLabel   = "aws-service"
 )
