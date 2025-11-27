@@ -119,7 +119,7 @@ func TestHTTPSCallWithInsecureSkipVerify(t *testing.T) {
 		},
 	}
 
-	client, err := HTTPClientForEndpoint(opts)
+	client, err := HTTPClientForEndpoint(opts.Endpoint, nil)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, opts.Endpoint.ServerURL, nil)
@@ -155,7 +155,7 @@ func TestHTTPSCallFailsWithoutInsecureSkipVerify(t *testing.T) {
 		},
 	}
 
-	client, err := HTTPClientForEndpoint(opts)
+	client, err := HTTPClientForEndpoint(opts.Endpoint, nil)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, opts.Endpoint.ServerURL, nil)
@@ -192,7 +192,7 @@ func TestHTTPSCallSucceedsWithoutInsecureSkipVerify(t *testing.T) {
 		},
 	}
 
-	client, err := HTTPClientForEndpoint(opts)
+	client, err := HTTPClientForEndpoint(opts.Endpoint, nil)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, opts.Endpoint.ServerURL, nil)

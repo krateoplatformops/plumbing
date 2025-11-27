@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/krateoplatformops/plumbing/endpoints"
 )
 
 // cloneRequest creates a shallow copy of the request along with a deep copy of the Headers.
@@ -49,8 +52,42 @@ func isTextResponse(resp *http.Response) bool {
 	return strings.HasPrefix(media, "text/")
 }
 
-func ComputeAwsHeader(opts RequestOptions) string {
-	ep := opts.Endpoint
+func ComputeAwsHeaders(ep *endpoints.Endpoint, ex *RequestInfo) []string {
+	var amzDate string
+	if len(ep.AwsTime) != 0 {
+		// If AwsTime is just YYYYMMDD, construct full timestamp
+		if len(ep.AwsTime) == 8 {
+			amzDate = ep.AwsTime + "T000000Z"
+		} else {
+			amzDate = ep.AwsTime
+		}
+	} else {
+		t := time.Now().UTC()
+		amzDate = t.Format("20060102T150405Z")
+	}
+	url, _ := url.Parse(ep.ServerURL)
+	host := url.Host
+	if host == "" {
+		host = "localhost"
+	}
+
+	canonicalURI := ex.Path
+	if canonicalURI == "" {
+		canonicalURI = "/"
+	}
+
+	// Step 2: Build headers
+	// Empty payload hash (SHA256 of empty string): "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*ex.Payload)))
+
+	return []string{
+		"host:" + host,
+		"x-amz-content-sha256:" + payloadHash,
+		"x-amz-date:" + amzDate,
+	}
+}
+
+func ComputeAwsSignature(ep *endpoints.Endpoint, ex *RequestInfo) string {
 	// Docs:
 	// https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
 	// https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-auth-using-authorization-header.html
@@ -72,23 +109,23 @@ func ComputeAwsHeader(opts RequestOptions) string {
 		amzDate = t.Format("20060102T150405Z")
 	}
 
-	host := opts.Endpoint.ServerURL
+	host := ep.ServerURL
 	if host == "" {
 		host = "localhost"
 	}
 
-	canonicalURI := opts.Path
+	canonicalURI := ex.Path
 	if canonicalURI == "" {
 		canonicalURI = "/"
 	}
 
 	// Step 2: Build headers
 	// Empty payload hash (SHA256 of empty string): "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*opts.Payload)))
+	payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*ex.Payload)))
 
 	headers := map[string]string{}
 
-	for _, v := range opts.Headers {
+	for _, v := range ex.Headers {
 		split := strings.Split(v, ":")
 		headers[strings.Trim(split[0], " ")] = strings.Trim(split[1], " ")
 	}
@@ -115,7 +152,7 @@ func ComputeAwsHeader(opts RequestOptions) string {
 	signedHeaders := strings.Join(headerKeys, ";")
 
 	// Step 3: Build canonical request
-	method := *opts.Verb
+	method := *ex.Verb
 	canonicalQueryString := ""
 
 	canonicalRequest := method + "\n" +

@@ -3,10 +3,11 @@ package request
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/krateoplatformops/plumbing/endpoints"
 )
 
-func HTTPClientForEndpoint(opts RequestOptions) (*http.Client, error) {
-	ep := opts.Endpoint
+func HTTPClientForEndpoint(ep *endpoints.Endpoint, ex *RequestInfo) (*http.Client, error) {
 	rt, err := tlsConfigFor(ep)
 	if err != nil {
 		return &http.Client{
@@ -52,9 +53,13 @@ func HTTPClientForEndpoint(opts RequestOptions) (*http.Client, error) {
 		}
 
 	case ep.HasAwsAuth():
-		rt = &awsAuthRoundTripper{
-			headerPayload: ComputeAwsHeader(opts),
-			rt:            rt,
+		if ex == nil {
+			return nil, fmt.Errorf("extra request options required for AWS authentication")
+		} else {
+			rt = &awsAuthRoundTripper{
+				headerPayload: ComputeAwsSignature(ep, ex),
+				rt:            rt,
+			}
 		}
 	}
 
