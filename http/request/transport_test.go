@@ -111,18 +111,16 @@ func TestHTTPSCallWithInsecureSkipVerify(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	opts := RequestOptions{
-		Endpoint: &endpoints.Endpoint{
-			Debug:     false,
-			Insecure:  true,
-			ServerURL: server.URL,
-		},
+	ep := &endpoints.Endpoint{
+		Debug:     false,
+		Insecure:  true,
+		ServerURL: server.URL,
 	}
 
-	client, err := HTTPClientForEndpoint(opts.Endpoint, nil)
+	client, err := HTTPClientForEndpoint(ep, nil)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodGet, opts.Endpoint.ServerURL, nil)
+	req, err := http.NewRequest(http.MethodGet, ep.ServerURL, nil)
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
@@ -147,18 +145,16 @@ func TestHTTPSCallFailsWithoutInsecureSkipVerify(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	opts := RequestOptions{
-		Endpoint: &endpoints.Endpoint{
-			Debug:     false,
-			Insecure:  false,
-			ServerURL: server.URL,
-		},
+	ep := &endpoints.Endpoint{
+		Debug:     false,
+		Insecure:  false,
+		ServerURL: server.URL,
 	}
 
-	client, err := HTTPClientForEndpoint(opts.Endpoint, nil)
+	client, err := HTTPClientForEndpoint(ep, nil)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodGet, opts.Endpoint.ServerURL, nil)
+	req, err := http.NewRequest(http.MethodGet, ep.ServerURL, nil)
 	require.NoError(t, err)
 
 	_, err = client.Do(req)
@@ -181,21 +177,19 @@ func TestHTTPSCallSucceedsWithoutInsecureSkipVerify(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	opts := RequestOptions{
-		Endpoint: &endpoints.Endpoint{
-			Debug:                    false,
-			Insecure:                 false,
-			ServerURL:                server.URL,
-			CertificateAuthorityData: caDataBase64,
-			ClientCertificateData:    clientCertBase64,
-			ClientKeyData:            clientKeyBase64,
-		},
+	ep := &endpoints.Endpoint{
+		Debug:                    false,
+		Insecure:                 false,
+		ServerURL:                server.URL,
+		CertificateAuthorityData: caDataBase64,
+		ClientCertificateData:    clientCertBase64,
+		ClientKeyData:            clientKeyBase64,
 	}
 
-	client, err := HTTPClientForEndpoint(opts.Endpoint, nil)
+	client, err := HTTPClientForEndpoint(ep, nil)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodGet, opts.Endpoint.ServerURL, nil)
+	req, err := http.NewRequest(http.MethodGet, ep.ServerURL, nil)
 	require.NoError(t, err)
 
 	resp, _ := client.Do(req)
