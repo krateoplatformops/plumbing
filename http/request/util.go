@@ -52,9 +52,10 @@ func isTextResponse(resp *http.Response) bool {
 	return strings.HasPrefix(media, "text/")
 }
 
-func ComputeAwsHeaders(ep *endpoints.Endpoint, ex *RequestInfo) []string {
-	var amzDate string
+func ComputeAwsHeaders(ep *endpoints.Endpoint, ex *RequestInfo) ([]string, string, string, string, string, string) {
+	var dateStamp, amzDate string
 	if len(ep.AwsTime) != 0 {
+		dateStamp = ep.AwsTime
 		// If AwsTime is just YYYYMMDD, construct full timestamp
 		if len(ep.AwsTime) == 8 {
 			amzDate = ep.AwsTime + "T000000Z"
@@ -63,6 +64,7 @@ func ComputeAwsHeaders(ep *endpoints.Endpoint, ex *RequestInfo) []string {
 		}
 	} else {
 		t := time.Now().UTC()
+		dateStamp = t.Format("20060102")
 		amzDate = t.Format("20060102T150405Z")
 	}
 	url, _ := url.Parse(ep.ServerURL)
@@ -89,7 +91,7 @@ func ComputeAwsHeaders(ep *endpoints.Endpoint, ex *RequestInfo) []string {
 		"host:" + host,
 		"x-amz-content-sha256:" + payloadHash,
 		"x-amz-date:" + amzDate,
-	}
+	}, dateStamp, amzDate, host, canonicalURI, payloadHash
 }
 
 func ComputeAwsSignature(ep *endpoints.Endpoint, ex *RequestInfo) string {
@@ -98,35 +100,7 @@ func ComputeAwsSignature(ep *endpoints.Endpoint, ex *RequestInfo) string {
 	// https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-auth-using-authorization-header.html
 	// https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
 
-	// Step 1: Determine date/time
-	var dateStamp, amzDate string
-	if len(ep.AwsTime) != 0 {
-		dateStamp = ep.AwsTime
-		// If AwsTime is just YYYYMMDD, construct full timestamp
-		if len(ep.AwsTime) == 8 {
-			amzDate = ep.AwsTime + "T000000Z"
-		} else {
-			amzDate = ep.AwsTime
-		}
-	} else {
-		t := time.Now().UTC()
-		dateStamp = t.Format("20060102")
-		amzDate = t.Format("20060102T150405Z")
-	}
-
-	host := ep.ServerURL
-	if host == "" {
-		host = "localhost"
-	}
-
-	canonicalURI := ex.Path
-	if canonicalURI == "" {
-		canonicalURI = "/"
-	}
-
-	// Step 2: Build headers
-	// Empty payload hash (SHA256 of empty string): "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*ex.Payload)))
+	_, dateStamp, amzDate, _, canonicalURI, payloadHash := ComputeAwsHeaders(ep, ex)
 
 	headers := map[string]string{}
 
@@ -141,10 +115,10 @@ func ComputeAwsSignature(ep *endpoints.Endpoint, ex *RequestInfo) string {
 		headerKeys = append(headerKeys, k)
 	}
 
-	// fmt.Printf("headerKeys: \n%s\n\n", headerKeys)
-	// fmt.Printf("Header: \n%s\n\n", opts.Headers)
-
 	sort.Strings(headerKeys)
+
+	// fmt.Printf("headerKeys: \n%s\n\n", headerKeys)
+	// fmt.Printf("Header: \n%s\n\n", ex.Headers)
 
 	var canonicalHeaders strings.Builder
 	for _, k := range headerKeys {

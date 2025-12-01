@@ -1,11 +1,8 @@
 package request
 
 import (
-	"crypto/sha256"
-	"fmt"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/krateoplatformops/plumbing/endpoints"
 )
@@ -71,7 +68,7 @@ func TestComputeAwsHeader(t *testing.T) {
 
 	opts := RequestOptions{
 		Endpoint: &endpoints.Endpoint{
-			ServerURL:    "examplebucket.s3.amazonaws.com",
+			ServerURL:    "https://examplebucket.s3.amazonaws.com",
 			AwsAccessKey: "AKIAIOSFODNN7EXAMPLE",
 			AwsSecretKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 			AwsRegion:    "us-east-1",
@@ -87,38 +84,7 @@ func TestComputeAwsHeader(t *testing.T) {
 			Verb:    &verb,
 		},
 	}
-
-	var amzDate string
-	if len(opts.Endpoint.AwsTime) != 0 {
-		// If AwsTime is just YYYYMMDD, construct full timestamp
-		if len(opts.Endpoint.AwsTime) == 8 {
-			amzDate = opts.Endpoint.AwsTime + "T000000Z"
-		} else {
-			amzDate = opts.Endpoint.AwsTime
-		}
-	} else {
-		t := time.Now().UTC()
-		amzDate = t.Format("20060102T150405Z")
-	}
-	host := opts.Endpoint.ServerURL
-	if host == "" {
-		host = "localhost"
-	}
-
-	canonicalURI := opts.Path
-	if canonicalURI == "" {
-		canonicalURI = "/"
-	}
-
-	// Step 2: Build headers
-	// Empty payload hash (SHA256 of empty string): "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*opts.Payload)))
-
-	headers := []string{
-		"host:" + host,
-		"x-amz-content-sha256:" + payloadHash,
-		"x-amz-date:" + amzDate,
-	}
+	headers, _, _, _, _, _ := ComputeAwsHeaders(opts.Endpoint, &opts.RequestInfo)
 
 	opts.Headers = append(opts.Headers, headers...)
 

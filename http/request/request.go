@@ -58,7 +58,7 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 	}
 	// Additional headers for AWS Signature 4 algorithm
 	if opts.Endpoint.HasAwsAuth() {
-		headers := ComputeAwsHeaders(opts.Endpoint, &opts.RequestInfo)
+		headers, _, _, _, _, _ := ComputeAwsHeaders(opts.Endpoint, &opts.RequestInfo)
 		opts.Headers = append(opts.Headers, headers...)
 		opts.Headers = append(opts.Headers, xcontext.LabelKrateoTraceId+":"+xcontext.TraceId(ctx, true))
 		// Set all headers to lower case for AWS signature
