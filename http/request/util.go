@@ -78,7 +78,12 @@ func ComputeAwsHeaders(ep *endpoints.Endpoint, ex *RequestInfo) []string {
 
 	// Step 2: Build headers
 	// Empty payload hash (SHA256 of empty string): "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	payloadHash := fmt.Sprintf("%x", sha256.Sum256([]byte(*ex.Payload)))
+	payloadHash := ""
+	if ex.Payload != nil {
+		payloadHash = fmt.Sprintf("%x", sha256.Sum256([]byte(*ex.Payload)))
+	} else {
+		payloadHash = fmt.Sprintf("%x", sha256.Sum256([]byte("")))
+	}
 
 	return []string{
 		"host:" + host,
