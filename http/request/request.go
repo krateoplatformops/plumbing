@@ -60,7 +60,12 @@ func Do(ctx context.Context, opts RequestOptions) *response.Status {
 	if opts.Endpoint.HasAwsAuth() {
 		headers := ComputeAwsHeaders(opts.Endpoint, &opts.RequestInfo)
 		opts.Headers = append(opts.Headers, headers...)
-		opts.Headers = append(opts.Headers, strings.ToLower(xcontext.LabelKrateoTraceId)+":"+xcontext.TraceId(ctx, true))
+		opts.Headers = append(opts.Headers, xcontext.LabelKrateoTraceId+":"+xcontext.TraceId(ctx, true))
+		// Set all headers to lower case for AWS signature
+		for i := range opts.Headers {
+			hParts := strings.Split(opts.Headers[i], ":")
+			opts.Headers[i] = strings.ToLower(strings.Trim(hParts[0], " ")) + ":" + strings.Trim(hParts[1], " ")
+		}
 		sort.Strings(opts.Headers)
 	} else {
 		call.Header.Set(xcontext.LabelKrateoTraceId, xcontext.TraceId(ctx, true))
