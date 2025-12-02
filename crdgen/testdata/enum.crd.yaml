@@ -48,7 +48,10 @@ spec:
               display:
                 default: 1
                 description: Numero di volte da mostrare il messaggio
-                format: int32
+                enum:
+                - 1
+                - 2
+                - 3
                 type: integer
               greeting:
                 description: Il testo del messaggio di saluto

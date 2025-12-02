@@ -9,7 +9,8 @@
     "display": {
       "type": "integer",
       "default": 1,
-      "description": "Numero di volte da mostrare il messaggio"
+      "description": "Numero di volte da mostrare il messaggio",
+      "enum": [1, 2, 3]
     },
     "verbose": {
       "type": "boolean",
