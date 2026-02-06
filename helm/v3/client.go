@@ -2,6 +2,7 @@ package helm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/krateoplatformops/plumbing/helm/getter/cache"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/storage/driver"
 	"k8s.io/client-go/rest"
 )
 
@@ -97,7 +99,6 @@ func (c *client) Install(ctx context.Context, releaseName string, chartRef strin
 }
 
 func (c *client) Upgrade(ctx context.Context, releaseName, chartRef string, cfg *helmconfig.UpgradeConfig) (*helmconfig.Release, error) {
-
 	upgradeClient := action.NewUpgrade(c.actionConfig)
 	applyUpgradeConfig(upgradeClient, c.namespace, cfg)
 
@@ -157,6 +158,9 @@ func (c *client) GetRelease(ctx context.Context, releaseName string, cfg *helmco
 
 	rel, err := getClient.Run(releaseName)
 	if err != nil {
+		if errors.Is(err, driver.ErrReleaseNotFound) {
+			return nil, nil // Not found is not an error for GetRelease
+		}
 		return nil, fmt.Errorf("get release failed: %w", err)
 	}
 
