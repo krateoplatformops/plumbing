@@ -61,6 +61,10 @@ func Get(ctx context.Context, uri string, opts ...Option) (io.Reader, string, er
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to cache %s: %w", o.URI, err)
 		}
+		// Reset the pointer to the beginning so the caller can read it
+		if seeker, ok := b.(io.Seeker); ok {
+			seeker.Seek(0, io.SeekStart)
+		}
 	}
 
 	return b, uri, nil

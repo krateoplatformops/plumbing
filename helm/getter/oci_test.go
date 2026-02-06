@@ -268,6 +268,29 @@ func TestOCIGetter_Integration(t *testing.T) {
 			t.Errorf("expected resolved URI %s, got %s", expected, resolvedURI)
 		}
 	})
+
+	t.Run("Version Not Specified", func(t *testing.T) {
+		// URI without :1.0.0
+		uriWithoutTag := fmt.Sprintf("oci://%s/test/mychart", host)
+
+		opts := GetOptions{
+			URI:                   uriWithoutTag,
+			InsecureSkipVerifyTLS: true,
+		}
+
+		// If your code works, it will resolve this to .../mychart:1.0.0
+		// and correctly fetch from the mock registry.
+		_, resolvedURI, err := g.Get(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("failed to fetch with injected version: %v", err)
+		}
+
+		expected := uriWithoutTag + ":1.0.0"
+		if resolvedURI != expected {
+			t.Errorf("expected resolved URI %s, got %s", expected, resolvedURI)
+		}
+	})
+
 	t.Run("Single Unknown Layer Fallback", func(t *testing.T) {
 		// 1. Create content for the unknown layer
 		customContent := []byte("fallback content")

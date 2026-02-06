@@ -8,9 +8,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
@@ -76,6 +78,26 @@ func (g *ociGetter) Get(ctx context.Context, opts GetOptions) (io.Reader, string
 		return nil, "", fmt.Errorf("invalid repository reference: %w", err)
 	}
 
+	reference := repo.Reference.Reference
+	if reference == "" || reference == "latest" { // Helm doesn't use "latest" tag
+		// 1. List tags from the OCI registry
+		var tags []string
+		err := repo.Tags(ctx, "", func(repoTags []string) error {
+			tags = append(tags, repoTags...)
+			return nil
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to list tags for discovery: %w", err)
+		}
+
+		// 2. Resolve the best version
+		latest, err := findBestSemverMatch(tags)
+		if err != nil {
+			return nil, "", fmt.Errorf("no valid semantic versions found: %w", err)
+		}
+		reference = latest
+	}
+
 	// 3. Configure HTTP Client and Auth
 	// Create an auth client using the shared transport for efficiency
 	authClient := &auth.Client{
@@ -100,9 +122,9 @@ func (g *ociGetter) Get(ctx context.Context, opts GetOptions) (io.Reader, string
 
 	// 4. Resolve Tag -> Descriptor
 	// This performs a HEAD/GET request to fetch the manifest digest
-	desc, err := repo.Resolve(ctx, repo.Reference.Reference)
+	desc, err := repo.Resolve(ctx, reference)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to resolve reference %s: %w", refString, err)
+		return nil, "", fmt.Errorf("failed to resolve reference %s: %w - %s", refString, err, reference)
 	}
 
 	// 5. Download Manifest
@@ -156,4 +178,28 @@ func getTransport(insecure bool) http.RoundTripper {
 		return retry.NewTransport(t) // ORAS retry wrapper
 	}
 	return retry.NewTransport(sharedTransport)
+}
+
+func findBestSemverMatch(tags []string) (string, error) {
+	var versions []*semver.Version
+	for _, t := range tags {
+		v, err := semver.NewVersion(t)
+		if err != nil {
+			continue // Skip non-semver tags
+		}
+		// By default, Helm ignores prereleases
+		if v.Prerelease() == "" {
+			versions = append(versions, v)
+		}
+	}
+
+	if len(versions) == 0 {
+		return "", fmt.Errorf("no stable semver tags found")
+	}
+
+	// Sort versions
+	sort.Sort(semver.Collection(versions))
+
+	// Return the last (highest) one
+	return versions[len(versions)-1].Original(), nil
 }

@@ -72,13 +72,9 @@ func WithTimeout(t time.Duration) Option {
 	}
 }
 
-func WithCache(dir string, ttl time.Duration) Option {
+func WithCache(c *cache.DiskCache) Option {
 	return func(o *GetOptions) error {
-		var err error
-		o.Cache, err = cache.NewDiskCache(
-			cache.WithDir(dir),
-			cache.WithTTL(ttl),
-		)
-		return err
+		o.Cache = c
+		return nil
 	}
 }
