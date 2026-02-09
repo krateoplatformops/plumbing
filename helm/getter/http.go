@@ -51,11 +51,15 @@ func (g *repoGetter) Get(ctx context.Context, opts GetOptions) (io.Reader, strin
 
 	// If the URL is relative, resolve it against the base repository URI
 	if !u.IsAbs() {
-		base, err := url.Parse(opts.URI)
+		// Use URLJoin helper for proper path joining
+		joined, err := repo.URLJoin(opts.URI, chartUrlStr)
 		if err != nil {
-			return nil, "", fmt.Errorf("invalid repo uri: %w", err)
+			return nil, "", fmt.Errorf("failed to join chart URL: %w", err)
 		}
-		u = base.ResolveReference(u)
+		u, err = url.Parse(joined)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid joined chart URL: %w", err)
+		}
 	}
 
 	// Final validation: Ensure we have a valid absolute URI with a scheme

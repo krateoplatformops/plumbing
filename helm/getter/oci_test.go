@@ -270,8 +270,14 @@ func TestOCIGetter_Integration(t *testing.T) {
 	})
 
 	t.Run("Version Not Specified", func(t *testing.T) {
+		// Create a dedicated server for this test to ensure clean state
+		versionRegistry := newMockOCIRegistry(chartContent, false)
+		versionServer := httptest.NewServer(versionRegistry)
+		defer versionServer.Close()
+		versionHost := strings.TrimPrefix(versionServer.URL, "http://")
+
 		// URI without :1.0.0
-		uriWithoutTag := fmt.Sprintf("oci://%s/test/mychart", host)
+		uriWithoutTag := fmt.Sprintf("oci://%s/test/mychart", versionHost)
 
 		opts := GetOptions{
 			URI:                   uriWithoutTag,
@@ -409,6 +415,14 @@ func (m *mockOCIRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := r.URL.Path
+
+	// Handle tags list: /v2/<name>/tags/list
+	if strings.HasSuffix(path, "/tags/list") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"name":"test/mychart","tags":["1.0.0","0.9.0"]}`))
+		return
+	}
 
 	// Handle manifest requests: /v2/<name>/manifests/<reference>
 	if strings.Contains(path, "/manifests/") {

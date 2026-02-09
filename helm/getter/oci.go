@@ -60,7 +60,6 @@ func (g *ociGetter) Get(ctx context.Context, opts GetOptions) (io.Reader, string
 	}
 
 	// Add tag/version if missing and not using digest
-	// Check for tag by looking for : after the last /
 	if opts.Version != "" && !strings.Contains(refString, "@") {
 		lastSlash := strings.LastIndex(refString, "/")
 		afterLastSlash := refString
@@ -72,15 +71,39 @@ func (g *ociGetter) Get(ctx context.Context, opts GetOptions) (io.Reader, string
 		}
 	}
 
-	// 2. Create Remote Repository (ORAS v2)
+	// 2. Create Remote Repository
 	repo, err := remote.NewRepository(refString)
 	if err != nil {
 		return nil, "", fmt.Errorf("invalid repository reference: %w", err)
 	}
 
+	registry := repo.Reference.Registry
+	repo.PlainHTTP = strings.HasPrefix(strings.ToLower(registry), "localhost") ||
+		strings.HasPrefix(strings.ToLower(registry), "127.0.0.1") ||
+		strings.HasPrefix(strings.ToLower(registry), "[::1]")
+
+	// 3. Configure Auth Client FIRST (before any registry operations)
+	authClient := &auth.Client{
+		Client: &http.Client{
+			Transport: getTransport(opts.InsecureSkipVerifyTLS),
+			Timeout:   opts.Timeout,
+		},
+		Cache: auth.NewCache(),
+	}
+
+	// Set credentials if provided
+	if opts.Username != "" && opts.Password != "" {
+		authClient.Credential = auth.StaticCredential(repo.Reference.Registry, auth.Credential{
+			Username: opts.Username,
+			Password: opts.Password,
+		})
+	}
+
+	repo.Client = authClient
+
+	// 4. Now handle version discovery if needed
 	reference := repo.Reference.Reference
-	if reference == "" || reference == "latest" { // Helm doesn't use "latest" tag
-		// 1. List tags from the OCI registry
+	if reference == "" || reference == "latest" {
 		var tags []string
 		err := repo.Tags(ctx, "", func(repoTags []string) error {
 			tags = append(tags, repoTags...)
@@ -90,44 +113,21 @@ func (g *ociGetter) Get(ctx context.Context, opts GetOptions) (io.Reader, string
 			return nil, "", fmt.Errorf("failed to list tags for discovery: %w", err)
 		}
 
-		// 2. Resolve the best version
 		latest, err := findBestSemverMatch(tags)
 		if err != nil {
 			return nil, "", fmt.Errorf("no valid semantic versions found: %w", err)
 		}
 		reference = latest
+		refString = fmt.Sprintf("%s:%s", refString, latest)
 	}
 
-	// 3. Configure HTTP Client and Auth
-	// Create an auth client using the shared transport for efficiency
-	authClient := &auth.Client{
-		Client: &http.Client{
-			// Select secure or insecure transport based on options
-			Transport: getTransport(opts.InsecureSkipVerifyTLS),
-			Timeout:   opts.Timeout,
-		},
-		Cache: auth.NewCache(), // Auth token cache
-	}
-
-	// Set static credentials if provided
-	if opts.Username != "" && opts.Password != "" {
-		authClient.Credential = auth.StaticCredential(repo.Reference.Registry, auth.Credential{
-			Username: opts.Username,
-			Password: opts.Password,
-		})
-	}
-
-	repo.Client = authClient
-	repo.PlainHTTP = opts.InsecureSkipVerifyTLS // Support for HTTP registries (non-HTTPS)
-
-	// 4. Resolve Tag -> Descriptor
-	// This performs a HEAD/GET request to fetch the manifest digest
+	// 5. Resolve Tag -> Descriptor
 	desc, err := repo.Resolve(ctx, reference)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to resolve reference %s: %w - %s", refString, err, reference)
 	}
 
-	// 5. Download Manifest
+	// 6. Download Manifest
 	// FetchAll is acceptable here as the manifest is small (KB), so loading it into RAM is safe.
 	manifestBytes, err := content.FetchAll(ctx, repo, desc)
 	if err != nil {
@@ -139,7 +139,7 @@ func (g *ociGetter) Get(ctx context.Context, opts GetOptions) (io.Reader, string
 		return nil, "", fmt.Errorf("failed to parse manifest: %w", err)
 	}
 
-	// 6. Identify the Chart Layer
+	// 7. Identify the Chart Layer
 	var chartLayerDesc *ocispec.Descriptor
 	for _, layer := range manifest.Layers {
 		if layer.MediaType == ChartLayerMediaType || layer.MediaType == LegacyLayerMediaType {
@@ -158,7 +158,7 @@ func (g *ociGetter) Get(ctx context.Context, opts GetOptions) (io.Reader, string
 		}
 	}
 
-	// 7. Stream the Layer
+	// 8. Stream the Layer
 	// repo.Fetch returns an io.ReadCloser connected directly to the HTTP response.
 	// This does NOT load the chart data into memory.
 	rc, err := repo.Fetch(ctx, *chartLayerDesc)
