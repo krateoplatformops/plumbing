@@ -34,7 +34,7 @@ func ValuesFromSpec(un *unstructured.Unstructured) (Values, error) {
 	return spec, nil
 }
 
-func (v Values) InjectGlobalValues(mg unstructured.Unstructured, pluralizer pluralizer, krateoNamespace string) error {
+func (v Values) InjectGlobalValues(mg *unstructured.Unstructured, pluralizer pluralizer, krateoNamespace string) error {
 	gvk := mg.GroupVersionKind()
 	gvr, err := pluralizer.GVKtoGVR(gvk)
 	if err != nil {

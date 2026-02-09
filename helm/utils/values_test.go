@@ -142,7 +142,7 @@ func TestInjectGlobalValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.initialValues.InjectGlobalValues(*tt.mg, tt.pluralizer, tt.krateoNamespace)
+			err := tt.initialValues.InjectGlobalValues(tt.mg, tt.pluralizer, tt.krateoNamespace)
 
 			spew.Dump(tt.initialValues)
 			if tt.wantErr {
