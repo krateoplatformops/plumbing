@@ -3,7 +3,6 @@ package cache
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -57,9 +56,6 @@ func NewDiskCache(opts ...Option) (*DiskCache, error) {
 		cleanupInterval: 1 * time.Hour,
 		stopCh:          make(chan struct{}),
 	}
-
-	fmt.Println("Cache directory:", c.dir) // Debug line to verify cache directory
-
 	// 2. Apply functional options
 	for _, opt := range opts {
 		opt(c)
