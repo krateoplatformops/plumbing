@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -144,7 +143,6 @@ func TestInjectGlobalValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.initialValues.InjectGlobalValues(tt.mg, tt.pluralizer, tt.krateoNamespace)
 
-			spew.Dump(tt.initialValues)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
