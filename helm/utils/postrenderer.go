@@ -2,8 +2,9 @@ package utils
 
 import (
 	"bytes"
+	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/go-errors/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,7 +24,7 @@ func LabelPostRenderFromSpec(mg *unstructured.Unstructured, pluralizer pluralize
 	gvk := mg.GroupVersionKind()
 	gvr, err := pluralizer.GVKtoGVR(gvk)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get GVR from GVK")
+		return nil, fmt.Errorf("failed to get GVR from GVK: %w", err)
 	}
 
 	return &LabelsPostRender{
