@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/go-errors/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,7 +39,7 @@ func LabelPostRenderFromSpec(mg *unstructured.Unstructured, pluralizer pluralize
 func (r *LabelsPostRender) Run(renderedManifests *bytes.Buffer) (modifiedManifests *bytes.Buffer, err error) {
 	nodes, err := kio.FromBytes(renderedManifests.Bytes())
 	if err != nil {
-		return renderedManifests, errors.Wrap(err, "parse rendered manifests failed")
+		return renderedManifests, fmt.Errorf("failed to parse rendered manifests: %w", err)
 	}
 	for _, v := range nodes {
 		labels := v.GetLabels()
@@ -61,7 +60,7 @@ func (r *LabelsPostRender) Run(renderedManifests *bytes.Buffer) (modifiedManifes
 
 	str, err := kio.StringAll(nodes)
 	if err != nil {
-		return renderedManifests, errors.Wrap(err, "string all nodes failed")
+		return renderedManifests, fmt.Errorf("failed to convert nodes to string: %w", err)
 	}
 
 	return bytes.NewBufferString(str), nil
