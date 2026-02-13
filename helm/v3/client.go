@@ -20,49 +20,85 @@ var _ helmconfig.Client = (*client)(nil)
 type client struct {
 	settings     *cli.EnvSettings
 	actionConfig *action.Configuration
-	cache        *cache.DiskCache
 	namespace    string
+	cache        *cache.DiskCache
+	debugLog     action.DebugLog
 }
 
-func NewClient(cfg *rest.Config, namespace string, logger slog.Handler) (*client, error) {
+type ClientOption func(*client) error
+
+func NewClient(cfg *rest.Config, opts ...ClientOption) (*client, error) {
 	settings := cli.New()
 
-	// Override namespace if provided
-	if namespace != "" {
-		settings.SetNamespace(namespace)
+	// Default configuration
+	c := &client{
+		settings:  settings,
+		namespace: settings.Namespace(),
 	}
 
+	// Apply functional options
+	for _, opt := range opts {
+		if err := opt(c); err != nil {
+			return nil, err
+		}
+	}
+
+	// Initialize Helm action configuration
 	actionConfig := new(action.Configuration)
+	driver := os.Getenv("HELM_DRIVER")
 
-	var driver string
-	// Respect HELM_DRIVER env var
-	if envDriver := os.Getenv("HELM_DRIVER"); envDriver != "" {
-		driver = envDriver
-	}
-
+	// Discard logger by default
 	debugLog := func(format string, v ...interface{}) {
-		slog.New(logger).Debug(fmt.Sprintf(format, v...))
+		slog.Debug(fmt.Sprintf(format, v...))
 	}
 
-	clientGetter := NewRESTClientGetter(namespace, nil, cfg)
-	if err := actionConfig.Init(clientGetter, settings.Namespace(), driver, debugLog); err != nil {
+	clientGetter := NewRESTClientGetter(c.namespace, nil, cfg)
+	if err := actionConfig.Init(clientGetter, c.namespace, driver, debugLog); err != nil {
 		return nil, fmt.Errorf("failed to init action config: %w", err)
 	}
 
-	return &client{
-		settings:     settings,
-		actionConfig: actionConfig,
-		namespace:    settings.Namespace(),
-	}, nil
+	c.actionConfig = actionConfig
+	return c, nil
 }
 
-func (c *client) WithCache(opts ...cache.Option) (*client, error) {
-	var err error
-	c.cache, err = cache.NewDiskCache(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache: %w", err)
+// WithNamespace sets a custom namespace for the client.
+func WithNamespace(ns string) ClientOption {
+	return func(c *client) error {
+		c.namespace = ns
+		c.settings.SetNamespace(ns)
+		return nil
 	}
-	return c, nil
+}
+
+// WithCache initializes a disk cache with the provided options.
+func WithCache(opts ...cache.Option) ClientOption {
+	return func(c *client) error {
+		dCache, err := cache.NewDiskCache(opts...)
+		if err != nil {
+			return fmt.Errorf("failed to create cache: %w", err)
+		}
+		c.cache = dCache
+		return nil
+	}
+}
+
+// WithLogger configures a custom slog handler for the client.
+func WithLogger(handler slog.Handler) ClientOption {
+	return func(c *client) error {
+		if handler == nil {
+			// Fallback to discard if nil is passed
+			handler = slog.DiscardHandler
+		}
+
+		logger := slog.New(handler)
+
+		// Map the slog.Logger to the Helm debug function signature
+		c.debugLog = func(format string, v ...interface{}) {
+			logger.Debug(fmt.Sprintf(format, v...))
+		}
+
+		return nil
+	}
 }
 
 func (c *client) Close() error {

@@ -54,10 +54,13 @@ func TestInstallAndUninstall_OCI(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 			// 2. Initialize Client
-			cli, err := NewClient(c.Client().RESTConfig(), namespace, logger.Handler())
+			cli, err := NewClient(c.Client().RESTConfig(),
+				WithCache(),
+				WithLogger(logger.Handler()),
+				WithNamespace(namespace),
+			)
 			assert.Nil(t, err)
 
-			cli, err = cli.WithCache()
 			assert.Nil(t, err)
 			defer cli.Close()
 
@@ -105,10 +108,11 @@ func TestUpgrade(t *testing.T) {
 		Assess("Install and Upgrade nginx chart", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-			cli, err := NewClient(c.Client().RESTConfig(), namespace, logger.Handler())
-			assert.Nil(t, err)
-
-			cli, err = cli.WithCache()
+			cli, err := NewClient(c.Client().RESTConfig(),
+				WithCache(),
+				WithLogger(logger.Handler()),
+				WithNamespace(namespace),
+			)
 			assert.Nil(t, err)
 			defer cli.Close()
 
@@ -171,10 +175,11 @@ func TestRollback(t *testing.T) {
 		Assess("Install, Upgrade, and Rollback nginx chart", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-			cli, err := NewClient(c.Client().RESTConfig(), namespace, logger.Handler())
-			assert.Nil(t, err)
-
-			cli, err = cli.WithCache()
+			cli, err := NewClient(c.Client().RESTConfig(),
+				WithCache(),
+				WithLogger(logger.Handler()),
+				WithNamespace(namespace),
+			)
 			assert.Nil(t, err)
 			defer cli.Close()
 
@@ -247,10 +252,11 @@ func TestGetRelease(t *testing.T) {
 		Assess("Install and Get nginx release", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-			cli, err := NewClient(c.Client().RESTConfig(), namespace, logger.Handler())
-			assert.Nil(t, err)
-
-			cli, err = cli.WithCache()
+			cli, err := NewClient(c.Client().RESTConfig(),
+				WithCache(),
+				WithLogger(logger.Handler()),
+				WithNamespace(namespace),
+			)
 			assert.Nil(t, err)
 			defer cli.Close()
 
@@ -304,10 +310,11 @@ func TestListReleases(t *testing.T) {
 		Assess("Install multiple releases and list them", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-			cli, err := NewClient(c.Client().RESTConfig(), namespace, logger.Handler())
-			assert.Nil(t, err)
-
-			cli, err = cli.WithCache()
+			cli, err := NewClient(c.Client().RESTConfig(),
+				WithCache(),
+				WithLogger(logger.Handler()),
+				WithNamespace(namespace),
+			)
 			assert.Nil(t, err)
 			defer cli.Close()
 
@@ -376,10 +383,11 @@ func TestInstallAndUninstall_Repo(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 			// 2. Initialize Client
-			cli, err := NewClient(c.Client().RESTConfig(), namespace, logger.Handler())
-			assert.Nil(t, err)
-
-			cli, err = cli.WithCache()
+			cli, err := NewClient(c.Client().RESTConfig(),
+				WithCache(),
+				WithLogger(logger.Handler()),
+				WithNamespace(namespace),
+			)
 			assert.Nil(t, err)
 			defer cli.Close()
 
@@ -433,10 +441,11 @@ func TestInstallAndUninstall_TGZ(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 			// 2. Initialize Client
-			cli, err := NewClient(c.Client().RESTConfig(), namespace, logger.Handler())
-			assert.Nil(t, err)
-
-			cli, err = cli.WithCache()
+			cli, err := NewClient(c.Client().RESTConfig(),
+				WithCache(),
+				WithLogger(logger.Handler()),
+				WithNamespace(namespace),
+			)
 			assert.Nil(t, err)
 			defer cli.Close()
 
