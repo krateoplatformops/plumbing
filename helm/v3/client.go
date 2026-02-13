@@ -86,19 +86,14 @@ func WithCache(opts ...cache.Option) ClientOption {
 }
 
 // WithLogger configures a custom slog handler for the client.
-func WithLogger(handler slog.Handler) ClientOption {
+func WithLogger(logger action.DebugLog) ClientOption {
 	return func(c *client) error {
-		if handler == nil {
+		if logger == nil {
 			// Fallback to discard if nil is passed
-			handler = slog.DiscardHandler
+			logger = func(format string, v ...interface{}) {}
 		}
 
-		logger := slog.New(handler)
-
-		// Map the slog.Logger to the Helm debug function signature
-		c.debugLog = func(format string, v ...interface{}) {
-			logger.Debug(fmt.Sprintf(format, v...))
-		}
+		c.debugLog = logger
 
 		return nil
 	}

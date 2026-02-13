@@ -5,7 +5,7 @@ package helm
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -50,13 +50,9 @@ func TestInstallAndUninstall_OCI(t *testing.T) {
 
 	f := features.New("Install and Uninstall OCI Chart").
 		Assess("Install and Uninstall nginx from OCI", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			// 1. Setup Logger
-			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
-			// 2. Initialize Client
+			// 1. Initialize Client
 			cli, err := NewClient(c.Client().RESTConfig(),
 				WithCache(),
-				WithLogger(logger.Handler()),
 				WithNamespace(namespace),
 			)
 			assert.Nil(t, err)
@@ -106,11 +102,11 @@ func TestUpgrade(t *testing.T) {
 
 	f := features.New("Upgrade Release").
 		Assess("Install and Upgrade nginx chart", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
 			cli, err := NewClient(c.Client().RESTConfig(),
 				WithCache(),
-				WithLogger(logger.Handler()),
+				WithLogger(func(format string, v ...interface{}) {
+					fmt.Println(fmt.Sprintf(format, v...))
+				}),
 				WithNamespace(namespace),
 			)
 			assert.Nil(t, err)
@@ -173,11 +169,8 @@ func TestRollback(t *testing.T) {
 
 	f := features.New("Rollback Release").
 		Assess("Install, Upgrade, and Rollback nginx chart", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
 			cli, err := NewClient(c.Client().RESTConfig(),
 				WithCache(),
-				WithLogger(logger.Handler()),
 				WithNamespace(namespace),
 			)
 			assert.Nil(t, err)
@@ -250,11 +243,8 @@ func TestGetRelease(t *testing.T) {
 
 	f := features.New("Get Release").
 		Assess("Install and Get nginx release", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
 			cli, err := NewClient(c.Client().RESTConfig(),
 				WithCache(),
-				WithLogger(logger.Handler()),
 				WithNamespace(namespace),
 			)
 			assert.Nil(t, err)
@@ -308,11 +298,8 @@ func TestListReleases(t *testing.T) {
 
 	f := features.New("List Releases").
 		Assess("Install multiple releases and list them", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
 			cli, err := NewClient(c.Client().RESTConfig(),
 				WithCache(),
-				WithLogger(logger.Handler()),
 				WithNamespace(namespace),
 			)
 			assert.Nil(t, err)
@@ -379,13 +366,9 @@ func TestInstallAndUninstall_Repo(t *testing.T) {
 
 	f := features.New("Install and Uninstall from Repo").
 		Assess("Install and Uninstall ingress-nginx from repo", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			// 1. Setup Logger
-			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
-			// 2. Initialize Client
+			// 1. Initialize Client
 			cli, err := NewClient(c.Client().RESTConfig(),
 				WithCache(),
-				WithLogger(logger.Handler()),
 				WithNamespace(namespace),
 			)
 			assert.Nil(t, err)
@@ -437,13 +420,9 @@ func TestInstallAndUninstall_TGZ(t *testing.T) {
 
 	f := features.New("Install and Uninstall TGZ Chart").
 		Assess("Install and Uninstall from .tgz archive", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			// 1. Setup Logger
-			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
-			// 2. Initialize Client
+			// 1. Initialize Client
 			cli, err := NewClient(c.Client().RESTConfig(),
 				WithCache(),
-				WithLogger(logger.Handler()),
 				WithNamespace(namespace),
 			)
 			assert.Nil(t, err)
