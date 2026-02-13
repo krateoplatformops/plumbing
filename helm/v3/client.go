@@ -34,6 +34,9 @@ func NewClient(cfg *rest.Config, opts ...ClientOption) (*client, error) {
 	c := &client{
 		settings:  settings,
 		namespace: settings.Namespace(),
+		debugLog: func(format string, v ...interface{}) {
+			// Default to discard if no logger is provided
+		},
 	}
 
 	// Apply functional options
