@@ -24,7 +24,7 @@ func Validate(signingKey, bearer string) (UserInfo, error) {
 		}, jwt.WithLeeway(5*time.Second))
 	if err != nil {
 		if !errors.Is(err, jwt.ErrTokenExpired) {
-			return UserInfo{}, ErrTokenInvalid
+			return UserInfo{}, err
 		}
 		return UserInfo{}, ErrTokenExpired
 	}
