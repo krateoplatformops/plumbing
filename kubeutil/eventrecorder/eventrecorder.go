@@ -40,3 +40,14 @@ func Create(ctx context.Context, rc *rest.Config, recorderName string, logger *k
 	}
 	return eventBroadcaster.NewRecorder(eventScheme, recorderName), nil
 }
+
+// CreateWithThrottle creates a standard Kubernetes EventRecorder and wraps it
+// with the state-aware throttling recorder to suppress unchanged events.
+func CreateWithThrottle(ctx context.Context, rc *rest.Config, recorderName string, logger *klog.Logger) (record.EventRecorder, error) {
+	recorder, err := Create(ctx, rc, recorderName, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewStateAwareRecorder(recorder), nil
+}
