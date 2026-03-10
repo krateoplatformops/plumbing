@@ -3,6 +3,7 @@ package eventrecorder
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -99,5 +100,31 @@ func TestThrottledRecorder_ForgetForgetsState(t *testing.T) {
 
 	if got := len(inner.calls); got != 2 {
 		t.Fatalf("expected 2 published events, got %d", got)
+	}
+}
+
+func TestThrottledRecorder_ForcedPublishAfterMaxSilence(t *testing.T) {
+	inner := &fakeEventRecorder{}
+	r := NewStateAwareRecorderWithMaxSilence(inner, 10*time.Second)
+
+	base := time.Unix(1700000000, 0)
+	now := base
+	r.now = func() time.Time { return now }
+
+	obj := &metav1.PartialObjectMetadata{}
+	obj.SetNamespace("default")
+	obj.SetName("demo")
+	obj.SetUID("uid-1")
+
+	r.Eventf(obj, nil, "Normal", "Observe", "Observe", "state is ready") // publish
+	now = now.Add(1 * time.Second)
+	r.Eventf(obj, nil, "Normal", "Observe", "Observe", "state is ready") // suppressed (first suppression)
+	now = now.Add(5 * time.Second)
+	r.Eventf(obj, nil, "Normal", "Observe", "Observe", "state is ready") // suppressed
+	now = now.Add(5 * time.Second)
+	r.Eventf(obj, nil, "Normal", "Observe", "Observe", "state is ready") // forced publish
+
+	if got := len(inner.calls); got != 2 {
+		t.Fatalf("expected 2 published events with forced publish after silence, got %d", got)
 	}
 }

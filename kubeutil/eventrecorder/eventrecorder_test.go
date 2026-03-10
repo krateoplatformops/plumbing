@@ -3,6 +3,7 @@ package eventrecorder
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/krateoplatformops/plumbing/ptr"
 	"k8s.io/client-go/rest"
@@ -127,5 +128,28 @@ func TestCreateWithThrottle(t *testing.T) {
 				t.Errorf("CreateWithThrottle() did not return *ThrottledRecorder, got %T", recorder)
 			}
 		})
+	}
+}
+
+func TestCreateWithThrottle_UsesConfiguredMaxSilence(t *testing.T) {
+	t.Setenv(throttledRecorderMaxSilenceEnvKey, "7s")
+
+	recorder, err := CreateWithThrottle(
+		context.Background(),
+		&rest.Config{Host: "https://localhost:6443"},
+		"test-recorder",
+		ptr.To(klog.TODO()),
+	)
+	if err != nil {
+		t.Fatalf("CreateWithThrottle() error = %v", err)
+	}
+
+	throttled, ok := recorder.(*ThrottledRecorder)
+	if !ok {
+		t.Fatalf("CreateWithThrottle() did not return *ThrottledRecorder, got %T", recorder)
+	}
+
+	if throttled.maxSilence != 7*time.Second {
+		t.Fatalf("expected maxSilence=7s, got %s", throttled.maxSilence)
 	}
 }
