@@ -6,23 +6,27 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	helmconfig "github.com/krateoplatformops/plumbing/helm"
 	"github.com/krateoplatformops/plumbing/helm/getter/cache"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/storage/driver"
+	apiextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/rest"
 )
 
 var _ helmconfig.Client = (*client)(nil)
 
 type client struct {
-	settings     *cli.EnvSettings
-	actionConfig *action.Configuration
-	namespace    string
-	cache        *cache.DiskCache
-	debugLog     action.DebugLog
+	settings          *cli.EnvSettings
+	actionConfig      *action.Configuration
+	namespace         string
+	cache             *cache.DiskCache
+	debugLog          action.DebugLog
+	cachedClients     *CachedClients
+	crdInformerCancel context.CancelFunc
 }
 
 type ClientOption func(*client) error
@@ -99,7 +103,47 @@ func WithLogger(logger action.DebugLog) ClientOption {
 	}
 }
 
+// WithCRDInformer enables automatic discovery cache invalidation when CustomResourceDefinitions change.
+// This is useful for applications that need to handle dynamic CRD registration.
+// The informer will start watching CRDs and reset the discovery cache on Add, Update, or Delete events.
+func WithCRDInformer(cfg *rest.Config, resyncTime time.Duration) ClientOption {
+	return func(c *client) error {
+		// Create cached clients if not already created
+		if c.cachedClients == nil {
+			cachedClients, err := NewCachedClients(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to create cached clients: %w", err)
+			}
+			c.cachedClients = &cachedClients
+		}
+
+		// Create a new context for the informer
+		ctx, cancel := context.WithCancel(context.Background())
+		c.crdInformerCancel = cancel
+
+		// Initialize the API extensions client
+		apiExtCli, err := apiextclient.NewForConfig(cfg)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("failed to create API extensions client: %w", err)
+		}
+
+		crdInformer := NewCRDInformer(resyncTime, apiExtCli, c.cachedClients.mapper, c.debugLog)
+		if err := crdInformer.Start(ctx); err != nil {
+			cancel()
+			return fmt.Errorf("failed to start CRD informer: %w", err)
+		}
+
+		return nil
+	}
+}
+
 func (c *client) Close() error {
+	// Stop the CRD informer if it was started
+	if c.crdInformerCancel != nil {
+		c.crdInformerCancel()
+	}
+
 	if c.cache != nil {
 		c.cache.Stop()
 	}
