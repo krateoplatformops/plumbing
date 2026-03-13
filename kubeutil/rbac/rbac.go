@@ -3,10 +3,10 @@ package rbac
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"sync/atomic"
 	"time"
 
+	cachepkg "github.com/krateoplatformops/plumbing/cache"
 	xcontext "github.com/krateoplatformops/plumbing/context"
 	"github.com/krateoplatformops/plumbing/endpoints"
 	"github.com/krateoplatformops/plumbing/env"
@@ -17,116 +17,50 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-type UserCanOptions struct {
-	UserConfig    endpoints.Endpoint
+type UserCanTarget struct {
 	Verb          string
 	GroupResource schema.GroupResource
 	Namespace     string
 }
 
-// UserCan evaluates whether the current user can execute the given verb on the
-// target GroupResource in the provided namespace.
+type Authorizer struct {
+	cache    *cachepkg.TTLCache[userCanCacheKey, bool]
+	cacheTTL atomic.Int64
+}
+
+type AuthorizerOption func(*authorizerConfig)
+
+type authorizerConfig struct {
+	cacheTTL   time.Duration
+	maxEntries int
+}
+
+// UserCan evaluates multiple authorization checks for the current user and
+// returns a decision map keyed by target for O(1) lookups by the caller.
 //
-// Pipeline:
-//  1. Resolves user endpoint configuration from opts.UserConfig; if empty, falls
-//     back to context (xcontext.UserConfig).
-//  2. Checks the in-memory TTL cache (if enabled) and returns immediately on hit.
-//  3. Builds a Kubernetes REST config from the endpoint.
-//  4. Creates a clientset and sends a SelfSubjectAccessReview request.
-//  5. Stores the result in cache (if enabled) and returns the authorization outcome.
+// Behavior:
+//   - The user endpoint is always resolved from context via xcontext.UserConfig.
+//   - The package-level default Authorizer reuses cached entries per target when
+//     RBAC_USERCAN_CACHE_TTL is enabled.
+//   - Pending checks are grouped by namespace and first evaluated through
+//     SelfSubjectRulesReview.
+//   - If a rules review fails or is incomplete for some targets, the function
+//     falls back to precise per-target SelfSubjectAccessReview calls.
 //
-// Required context data:
-//   - If opts.UserConfig is empty, a user endpoint must be attached through
-//     xcontext.WithUserConfig(...) before calling this function.
-//   - If both opts.UserConfig and context user config are missing, the function
-//     logs an error and returns false.
-//   - A logger is optional: if not present, xcontext.Logger(ctx) falls back to a default logger.
-//
-// Notes:
-//   - opts.UserConfig allows explicit endpoint wiring, while context fallback
-//     keeps existing call sites compatible.
-//   - Any internal failure (missing context data, config/client creation, API call)
-//     results in false.
-func UserCan(ctx context.Context, opts UserCanOptions) (ok bool) {
-	log := xcontext.Logger(ctx)
-	ep := opts.UserConfig
-	if ep == (endpoints.Endpoint{}) {
-		var err error
-		ep, err = xcontext.UserConfig(ctx)
-		if err != nil {
-			log.Error("unable to get user endpoint", slog.Any("err", err))
-			return false
-		}
-	}
-
-	ttlNanos := userCanCacheTTLNanos.Load()
-	if ttlNanos > 0 {
-		now := time.Now().UnixNano()
-		cacheKey := newUserCanCacheKey(ep, opts)
-		if allowed, hit := getUserCanCache(cacheKey, now); hit {
-			log.Debug("UserCan result from cache",
-				slog.String("source", "cache"),
-				slog.Bool("allowed", allowed))
-			return allowed
-		}
-	}
-
-	log.Debug("UserCan requesting SelfSubjectAccessReview",
-		slog.String("source", "k8s-api"))
-
-	rc, err := kubeconfig.NewClientConfig(ctx, ep)
-	if err != nil {
-		log.Error("unable to create user client config", slog.Any("err", err))
-		return false
-	}
-
-	clientset, err := kubernetes.NewForConfig(rc)
-	if err != nil {
-		log.Error("unable to create kubernetes clientset", slog.Any("err", err))
-		return false
-	}
-
-	selfCheck := authv1.SelfSubjectAccessReview{
-		Spec: authv1.SelfSubjectAccessReviewSpec{
-			ResourceAttributes: &authv1.ResourceAttributes{
-				Group:     opts.GroupResource.Group,
-				Resource:  opts.GroupResource.Resource,
-				Namespace: opts.Namespace,
-				Verb:      opts.Verb,
-			},
-		},
-	}
-
-	resp, err := clientset.AuthorizationV1().SelfSubjectAccessReviews().
-		Create(context.TODO(), &selfCheck, metav1.CreateOptions{})
-	if err != nil {
-		log.Error("unable to perform SelfSubjectAccessReviews",
-			slog.Any("selfCheck", selfCheck), slog.Any("err", err))
-		return false
-	}
-
-	log.Debug("SelfSubjectAccessReviews result", slog.Any("response", resp))
-
-	if ttlNanos > 0 {
-		setUserCanCache(
-			newUserCanCacheKey(ep, opts), resp.Status.Allowed, time.Now().UnixNano()+ttlNanos)
-	}
-
-	return resp.Status.Allowed
+// Failure mode:
+//   - Missing user config or internal errors never panic; unresolved or denied
+//     targets remain false in the returned map.
+func UserCan(ctx context.Context, targets []UserCanTarget) map[UserCanTarget]bool {
+	return defaultAuthorizer.UserCan(ctx, targets)
 }
 
 const defaultUserCanCacheTTL = 10 * time.Second
+const defaultUserCanCacheMaxEntries = 4096
 
-var (
-	userCanCacheTTLNanos atomic.Int64
-	userCanCacheMu       sync.RWMutex
-	userCanCache         = make(map[userCanCacheKey]userCanCacheEntry, 256)
-)
+var defaultAuthorizer *Authorizer
 
 func init() {
-	userCanCacheTTLNanos.Store(
-		env.Duration("RBAC_USERCAN_CACHE_TTL", defaultUserCanCacheTTL).Nanoseconds(),
-	)
+	defaultAuthorizer = NewAuthorizer()
 }
 
 type userCanCacheKey struct {
@@ -137,56 +71,276 @@ type userCanCacheKey struct {
 	Namespace string
 }
 
-type userCanCacheEntry struct {
-	Allowed   bool
-	ExpiresAt int64
+type userCanPendingCheck struct {
+	index int
+	key   userCanCacheKey
+}
+
+// NewAuthorizer builds an RBAC authorizer with its own bounded TTL cache.
+//
+// Defaults are read from:
+//   - RBAC_USERCAN_CACHE_TTL
+//   - RBAC_USERCAN_CACHE_MAX_ENTRIES
+//
+// Explicit AuthorizerOption values override the environment-derived defaults.
+func NewAuthorizer(opts ...AuthorizerOption) *Authorizer {
+	cfg := authorizerConfig{
+		cacheTTL:   env.Duration("RBAC_USERCAN_CACHE_TTL", defaultUserCanCacheTTL),
+		maxEntries: env.Int("RBAC_USERCAN_CACHE_MAX_ENTRIES", defaultUserCanCacheMaxEntries),
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	auth := &Authorizer{
+		cache: cachepkg.NewTTL[userCanCacheKey, bool](
+			cachepkg.WithMaxEntries(cfg.maxEntries),
+		),
+	}
+	auth.cacheTTL.Store(cfg.cacheTTL.Nanoseconds())
+	return auth
+}
+
+func WithCacheTTL(ttl time.Duration) AuthorizerOption {
+	return func(cfg *authorizerConfig) {
+		cfg.cacheTTL = ttl
+	}
+}
+
+func WithCacheMaxEntries(maxEntries int) AuthorizerOption {
+	return func(cfg *authorizerConfig) {
+		cfg.maxEntries = maxEntries
+	}
 }
 
 func SetUserCanCacheTTL(ttl time.Duration) {
-	userCanCacheTTLNanos.Store(ttl.Nanoseconds())
-	if ttl <= 0 {
-		userCanCacheMu.Lock()
-		clear(userCanCache)
-		userCanCacheMu.Unlock()
+	defaultAuthorizer.SetCacheTTL(ttl)
+}
+
+func (a *Authorizer) SetCacheTTL(ttl time.Duration) {
+	a.cacheTTL.Store(ttl.Nanoseconds())
+	if ttl <= 0 && a.cache != nil {
+		a.cache.Clear()
 	}
 }
 
-func newUserCanCacheKey(ep endpoints.Endpoint, opts UserCanOptions) userCanCacheKey {
+func (a *Authorizer) Close() {
+	if a.cache != nil {
+		a.cache.Close()
+	}
+}
+
+// UserCan evaluates multiple authorization checks for the current user using
+// the receiver's cache configuration and returns a decision map keyed by target.
+func (a *Authorizer) UserCan(ctx context.Context, targets []UserCanTarget) map[UserCanTarget]bool {
+	log := xcontext.Logger(ctx)
+	if len(targets) == 0 {
+		return nil
+	}
+
+	result := make(map[UserCanTarget]bool, len(targets))
+	ep, ok := resolveUserEndpoint(ctx)
+	if !ok {
+		log.Error("unable to get user endpoint")
+		return result
+	}
+
+	allowed := make([]bool, len(targets))
+	ttl := time.Duration(a.cacheTTL.Load())
+	pending := make([]userCanPendingCheck, 0, len(targets))
+	grouped := make(map[string][]userCanPendingCheck, len(targets))
+
+	for i, tgt := range targets {
+		cacheKey := newUserCanCacheKey(ep, tgt)
+		if ttl > 0 && a.cache != nil {
+			if cachedAllowed, hit := a.cache.Get(cacheKey); hit {
+				allowed[i] = cachedAllowed
+				continue
+			}
+		}
+
+		item := userCanPendingCheck{
+			index: i,
+			key:   cacheKey,
+		}
+		pending = append(pending, item)
+		grouped[tgt.Namespace] = append(grouped[tgt.Namespace], item)
+	}
+
+	if len(pending) == 0 {
+		return buildUserCanResult(targets, allowed)
+	}
+
+	clientset, err := newUserClientset(ctx, ep)
+	if err != nil {
+		log.Error("unable to create kubernetes clientset", slog.Any("err", err))
+		return buildUserCanResult(targets, allowed)
+	}
+
+	for namespace, items := range grouped {
+		rulesReview, err := performSelfSubjectRulesReview(ctx, clientset, namespace)
+		if err != nil {
+			log.Debug("SelfSubjectRulesReview failed, falling back to per-target access reviews",
+				slog.String("namespace", namespace),
+				slog.Any("err", err))
+			a.resolvePendingWithAccessReviews(ctx, clientset, targets, allowed, items, ttl)
+			continue
+		}
+
+		log.Debug("SelfSubjectRulesReview result",
+			slog.String("namespace", namespace),
+			slog.Bool("incomplete", rulesReview.Status.Incomplete))
+
+		fallback := items[:0]
+		for _, item := range items {
+			target := targets[item.index]
+			if rulesAllowTarget(rulesReview.Status.ResourceRules, target) {
+				allowed[item.index] = true
+				log.Debug("UserCan result from rules review",
+					slog.String("source", "rules-review"),
+					slog.Bool("allowed", true))
+				a.storeCache(item.key, true, ttl)
+				continue
+			}
+			if !rulesReview.Status.Incomplete {
+				log.Debug("UserCan result from rules review",
+					slog.String("source", "rules-review"),
+					slog.Bool("allowed", false))
+				a.storeCache(item.key, false, ttl)
+				continue
+			}
+			fallback = append(fallback, item)
+		}
+
+		if len(fallback) > 0 {
+			a.resolvePendingWithAccessReviews(ctx, clientset, targets, allowed, fallback, ttl)
+		}
+	}
+
+	return buildUserCanResult(targets, allowed)
+}
+
+func newUserCanCacheKey(ep endpoints.Endpoint, target UserCanTarget) userCanCacheKey {
 	return userCanCacheKey{
 		Endpoint:  ep,
-		Verb:      opts.Verb,
-		Group:     opts.GroupResource.Group,
-		Resource:  opts.GroupResource.Resource,
-		Namespace: opts.Namespace,
+		Verb:      target.Verb,
+		Group:     target.GroupResource.Group,
+		Resource:  target.GroupResource.Resource,
+		Namespace: target.Namespace,
 	}
 }
 
-func getUserCanCache(key userCanCacheKey, now int64) (bool, bool) {
-	userCanCacheMu.RLock()
-	entry, ok := userCanCache[key]
-	userCanCacheMu.RUnlock()
-	if !ok {
-		return false, false
+func resolveUserEndpoint(ctx context.Context) (endpoints.Endpoint, bool) {
+	ep, err := xcontext.UserConfig(ctx)
+	if err != nil {
+		return endpoints.Endpoint{}, false
 	}
-	if now < entry.ExpiresAt {
-		return entry.Allowed, true
-	}
-
-	userCanCacheMu.Lock()
-	entry, ok = userCanCache[key]
-	if ok && now >= entry.ExpiresAt {
-		delete(userCanCache, key)
-	}
-	userCanCacheMu.Unlock()
-
-	return false, false
+	return ep, true
 }
 
-func setUserCanCache(key userCanCacheKey, allowed bool, expiresAt int64) {
-	userCanCacheMu.Lock()
-	userCanCache[key] = userCanCacheEntry{
-		Allowed:   allowed,
-		ExpiresAt: expiresAt,
+func newUserClientset(ctx context.Context, ep endpoints.Endpoint) (*kubernetes.Clientset, error) {
+	rc, err := kubeconfig.NewClientConfig(ctx, ep)
+	if err != nil {
+		return nil, err
 	}
-	userCanCacheMu.Unlock()
+	return kubernetes.NewForConfig(rc)
+}
+
+func performSelfSubjectAccessReview(
+	ctx context.Context,
+	clientset *kubernetes.Clientset,
+	target UserCanTarget,
+) (*authv1.SelfSubjectAccessReview, error) {
+	selfCheck := authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Group:     target.GroupResource.Group,
+				Resource:  target.GroupResource.Resource,
+				Namespace: target.Namespace,
+				Verb:      target.Verb,
+			},
+		},
+	}
+
+	return clientset.AuthorizationV1().SelfSubjectAccessReviews().
+		Create(ctx, &selfCheck, metav1.CreateOptions{})
+}
+
+func performSelfSubjectRulesReview(
+	ctx context.Context,
+	clientset *kubernetes.Clientset,
+	namespace string,
+) (*authv1.SelfSubjectRulesReview, error) {
+	review := authv1.SelfSubjectRulesReview{
+		Spec: authv1.SelfSubjectRulesReviewSpec{
+			Namespace: namespace,
+		},
+	}
+
+	return clientset.AuthorizationV1().SelfSubjectRulesReviews().
+		Create(ctx, &review, metav1.CreateOptions{})
+}
+
+func (a *Authorizer) resolvePendingWithAccessReviews(
+	ctx context.Context,
+	clientset *kubernetes.Clientset,
+	targets []UserCanTarget,
+	allowed []bool,
+	pending []userCanPendingCheck,
+	ttl time.Duration,
+) {
+	for _, item := range pending {
+		xcontext.Logger(ctx).Debug("UserCan requesting SelfSubjectAccessReview",
+			slog.String("source", "k8s-api"))
+		resp, err := performSelfSubjectAccessReview(ctx, clientset, targets[item.index])
+		if err != nil {
+			continue
+		}
+		xcontext.Logger(ctx).Debug("SelfSubjectAccessReviews result", slog.Any("response", resp))
+		allowed[item.index] = resp.Status.Allowed
+		a.storeCache(item.key, resp.Status.Allowed, ttl)
+	}
+}
+
+func (a *Authorizer) storeCache(key userCanCacheKey, allowed bool, ttl time.Duration) {
+	if ttl <= 0 || a.cache == nil {
+		return
+	}
+	a.cache.Set(key, allowed, ttl)
+}
+
+func rulesAllowTarget(rules []authv1.ResourceRule, target UserCanTarget) bool {
+	for _, rule := range rules {
+		if len(rule.ResourceNames) > 0 {
+			continue
+		}
+		if !stringSliceContains(rule.Verbs, target.Verb) {
+			continue
+		}
+		if !stringSliceContains(rule.APIGroups, target.GroupResource.Group) {
+			continue
+		}
+		if !stringSliceContains(rule.Resources, target.GroupResource.Resource) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func stringSliceContains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == "*" || value == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func buildUserCanResult(targets []UserCanTarget, allowed []bool) map[UserCanTarget]bool {
+	res := make(map[UserCanTarget]bool, len(targets))
+	for i, target := range targets {
+		res[target] = allowed[i]
+	}
+	return res
 }
