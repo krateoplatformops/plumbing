@@ -97,3 +97,25 @@ func (c *RESTClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	// and the specific overrides (like the namespace).
 	return clientcmd.NewDefaultClientConfig(*config, overrides)
 }
+
+// CachedClients holds cached discovery and mapper clients for improved performance
+// when watching for CRD changes.
+type CachedClients struct {
+	mapper          *restmapper.DeferredDiscoveryRESTMapper
+	discoveryClient discovery.CachedDiscoveryInterface
+}
+
+// NewCachedClients creates a new CachedClients instance from a REST config.
+func NewCachedClients(cfg *rest.Config) (CachedClients, error) {
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return CachedClients{}, err
+	}
+	cachedDiscovery := memory.NewMemCacheClient(discoveryClient)
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(cachedDiscovery)
+
+	return CachedClients{
+		mapper:          mapper,
+		discoveryClient: cachedDiscovery,
+	}, nil
+}
