@@ -331,6 +331,8 @@ func (co *typesCoder) buildStruct(typeName string, t *schemas.Type, applyFn ...f
 			st.AddLineComment("+kubebuilder:validation:Pattern=`%s`", prop.Pattern)
 		}
 
+		addLengthValidationMarkers(st, prop, "")
+
 		if prop.Format != "" {
 			st.AddLineComment("+kubebuilder:validation:Format=%s", prop.Format)
 		}
@@ -452,4 +454,53 @@ func (co *typesCoder) emitEnum(typeName, typeAlias string, t *schemas.Type) stri
 	co.generatedEnums[typeName] = true
 
 	return typeName
+}
+
+func addLengthValidationMarkers(st *gg.IStruct, t *schemas.Type, prefix string) {
+	if t == nil {
+		return
+	}
+
+	switch {
+	case isTypeOrNullable(t, "string"):
+		if t.MinLength > 0 {
+			st.AddLineComment("+kubebuilder:validation:%sMinLength=%s",
+				prefix, stringsutils.StrVal(t.MinLength))
+		}
+		if t.MaxLength > 0 {
+			st.AddLineComment("+kubebuilder:validation:%sMaxLength=%s",
+				prefix, stringsutils.StrVal(t.MaxLength))
+		}
+	case isTypeOrNullable(t, "array"):
+		addLengthValidationMarkers(st, t.Items, prefix+"items:")
+	}
+}
+
+func isTypeOrNullable(t *schemas.Type, wanted string) bool {
+	if t == nil {
+		return false
+	}
+
+	types := t.Type
+	if len(types) == 1 {
+		return types[0] == wanted
+	}
+
+	if len(types) == 2 {
+		hasWanted := false
+		hasNull := false
+
+		for _, typ := range types {
+			if typ == wanted {
+				hasWanted = true
+			}
+			if typ == "null" {
+				hasNull = true
+			}
+		}
+
+		return hasWanted && hasNull
+	}
+
+	return false
 }
