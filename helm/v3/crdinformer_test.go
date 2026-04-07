@@ -42,7 +42,6 @@ func TestStartCRDInformer_Add_Update_Delete_InvokeInvalidate(t *testing.T) {
 	invalidator := newFakeInvalidator()
 
 	crdInformer := NewCRDInformer(1*time.Minute, fakeClient, invalidator, func(format string, v ...interface{}) {
-		t.Logf(format, v...)
 	})
 
 	if err := crdInformer.Start(ctx); err != nil {
