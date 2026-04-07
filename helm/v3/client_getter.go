@@ -13,9 +13,10 @@ import (
 )
 
 type RESTClientGetter struct {
-	namespace  string
-	kubeConfig []byte
-	restConfig *rest.Config
+	namespace     string
+	kubeConfig    []byte
+	restConfig    *rest.Config
+	cachedClients *CachedClients
 
 	opts []RESTClientOption
 }
@@ -45,6 +46,18 @@ func NewRESTClientGetter(namespace string, kubeConfig []byte, restConfig *rest.C
 	}
 }
 
+// NewRESTClientGetterWithCachedClients returns a RESTClientGetter that reuses the provided
+// cached discovery and mapper clients when they are available.
+func NewRESTClientGetterWithCachedClients(namespace string, kubeConfig []byte, restConfig *rest.Config, cachedClients *CachedClients, opts ...RESTClientOption) *RESTClientGetter {
+	return &RESTClientGetter{
+		namespace:     namespace,
+		kubeConfig:    kubeConfig,
+		restConfig:    restConfig,
+		cachedClients: cachedClients,
+		opts:          opts,
+	}
+}
+
 // ToRESTConfig returns a REST config build from a given kubeconfig
 func (c *RESTClientGetter) ToRESTConfig() (*rest.Config, error) {
 	if c.restConfig != nil {
@@ -57,6 +70,10 @@ func (c *RESTClientGetter) ToRESTConfig() (*rest.Config, error) {
 
 // ToDiscoveryClient returns a CachedDiscoveryInterface that can be used as a discovery client.
 func (c *RESTClientGetter) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	if c.cachedClients != nil && c.cachedClients.discoveryClient != nil {
+		return c.cachedClients.discoveryClient, nil
+	}
+
 	config, err := c.ToRESTConfig()
 	if err != nil {
 		return nil, err
@@ -71,6 +88,11 @@ func (c *RESTClientGetter) ToDiscoveryClient() (discovery.CachedDiscoveryInterfa
 }
 
 func (c *RESTClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
+	if c.cachedClients != nil && c.cachedClients.mapper != nil {
+		expander := restmapper.NewShortcutExpander(c.cachedClients.mapper, c.cachedClients.discoveryClient, nil)
+		return expander, nil
+	}
+
 	discoveryClient, err := c.ToDiscoveryClient()
 	if err != nil {
 		return nil, err
