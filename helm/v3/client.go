@@ -23,6 +23,7 @@ type client struct {
 	settings          *cli.EnvSettings
 	actionConfig      *action.Configuration
 	namespace         string
+	restConfig        *rest.Config
 	cache             *cache.DiskCache
 	debugLog          action.DebugLog
 	cachedClients     *CachedClients
@@ -36,8 +37,9 @@ func NewClient(cfg *rest.Config, opts ...ClientOption) (*client, error) {
 
 	// Default configuration
 	c := &client{
-		settings:  settings,
-		namespace: settings.Namespace(),
+		settings:   settings,
+		namespace:  settings.Namespace(),
+		restConfig: rest.CopyConfig(cfg),
 		debugLog: func(format string, v ...interface{}) {
 			// Default to discard if no logger is provided
 		},
@@ -59,7 +61,12 @@ func NewClient(cfg *rest.Config, opts ...ClientOption) (*client, error) {
 		slog.Debug(fmt.Sprintf(format, v...))
 	}
 
-	clientGetter := NewRESTClientGetter(c.namespace, nil, cfg)
+	var clientGetter *RESTClientGetter
+	if c.cachedClients != nil {
+		clientGetter = NewRESTClientGetterWithCachedClients(c.namespace, nil, c.restConfig, c.cachedClients)
+	} else {
+		clientGetter = NewRESTClientGetter(c.namespace, nil, c.restConfig)
+	}
 	if err := actionConfig.Init(clientGetter, c.namespace, driver, debugLog); err != nil {
 		return nil, fmt.Errorf("failed to init action config: %w", err)
 	}
@@ -151,29 +158,29 @@ func (c *client) Close() error {
 }
 
 func (c *client) Install(ctx context.Context, releaseName string, chartRef string, cfg *helmconfig.InstallConfig) (*helmconfig.Release, error) {
-	installClient := action.NewInstall(c.actionConfig)
-	applyInstallConfig(installClient, releaseName, c.namespace, cfg)
+	if cfg == nil {
+		cfg = &helmconfig.InstallConfig{}
+	}
+	if cfg.ActionConfig == nil {
+		cfg.ActionConfig = &helmconfig.ActionConfig{}
+	}
 
-	chart, err := c.loadChart(ctx, chartRef, c.buildGetterOpts(cfg.ActionConfig))
+	namespace := c.namespace
+	if cfg.Namespace != "" {
+		namespace = cfg.Namespace
+	}
+
+	restCfg := c.restConfig
+	if cfg.RestConfig != nil {
+		restCfg = cfg.RestConfig
+	}
+
+	actionConfig, err := c.newActionConfig(namespace, restCfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load chart: %w", err)
+		return nil, err
 	}
 
-	if err := checkChartType(chart); err != nil {
-		return nil, fmt.Errorf("chart type check failed: %w", err)
-	}
-
-	chart, err = c.checkDependencies(ctx, chart, chartRef, cfg.ActionConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check dependencies: %w", err)
-	}
-
-	rel, err := installClient.RunWithContext(ctx, chart, cfg.Values)
-	if err != nil {
-		return nil, fmt.Errorf("install failed: %w", err)
-	}
-
-	return toWrapperRelease(rel), nil
+	return c.install(ctx, namespace, releaseName, chartRef, cfg, actionConfig)
 }
 
 func (c *client) Upgrade(ctx context.Context, releaseName, chartRef string, cfg *helmconfig.UpgradeConfig) (*helmconfig.Release, error) {
@@ -228,6 +235,65 @@ func (c *client) Rollback(ctx context.Context, releaseName string, cfg *helmconf
 	}
 
 	return rel, nil
+}
+
+func (c *client) install(ctx context.Context, namespace, releaseName, chartRef string, cfg *helmconfig.InstallConfig, actionConfig *action.Configuration) (*helmconfig.Release, error) {
+	if actionConfig == nil {
+		return nil, errors.New("action config is required")
+	}
+
+	installClient := action.NewInstall(actionConfig)
+	applyInstallConfig(installClient, releaseName, namespace, cfg)
+
+	chart, err := c.loadChart(ctx, chartRef, c.buildGetterOpts(cfg.ActionConfig))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load chart: %w", err)
+	}
+
+	if err := checkChartType(chart); err != nil {
+		return nil, fmt.Errorf("chart type check failed: %w", err)
+	}
+
+	chart, err = c.checkDependencies(ctx, chart, chartRef, cfg.ActionConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check dependencies: %w", err)
+	}
+
+	rel, err := installClient.RunWithContext(ctx, chart, cfg.Values)
+	if err != nil {
+		return nil, fmt.Errorf("install failed: %w", err)
+	}
+
+	return toWrapperRelease(rel), nil
+}
+
+func (c *client) newActionConfig(namespace string, restCfg *rest.Config) (*action.Configuration, error) {
+	actionConfig := new(action.Configuration)
+	driver := os.Getenv("HELM_DRIVER")
+
+	debugLog := func(format string, v ...interface{}) {
+		slog.Debug(fmt.Sprintf(format, v...))
+	}
+	if c.debugLog != nil {
+		debugLog = c.debugLog
+	}
+
+	cfgToUse := restCfg
+	if cfgToUse == nil {
+		cfgToUse = c.restConfig
+	}
+
+	var clientGetter *RESTClientGetter
+	if c.cachedClients != nil {
+		clientGetter = NewRESTClientGetterWithCachedClients(namespace, nil, cfgToUse, c.cachedClients)
+	} else {
+		clientGetter = NewRESTClientGetter(namespace, nil, cfgToUse)
+	}
+	if err := actionConfig.Init(clientGetter, namespace, driver, debugLog); err != nil {
+		return nil, fmt.Errorf("failed to init action config: %w", err)
+	}
+
+	return actionConfig, nil
 }
 
 func (c *client) GetRelease(ctx context.Context, releaseName string, cfg *helmconfig.GetConfig) (*helmconfig.Release, error) {

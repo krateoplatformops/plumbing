@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"k8s.io/client-go/rest"
 )
 
 // Release is a version-agnostic representation of a Helm release.
@@ -41,6 +43,8 @@ type Client interface {
 
 type InstallConfig struct {
 	*ActionConfig
+	Namespace  string
+	RestConfig *rest.Config
 	// Install-Only Fields
 	GenerateName    bool
 	CreateNamespace bool
