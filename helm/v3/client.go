@@ -186,6 +186,7 @@ func (c *client) Install(ctx context.Context, releaseName string, chartRef strin
 func (c *client) Upgrade(ctx context.Context, releaseName, chartRef string, cfg *helmconfig.UpgradeConfig) (*helmconfig.Release, error) {
 	upgradeClient := action.NewUpgrade(c.actionConfig)
 	applyUpgradeConfig(upgradeClient, c.namespace, cfg)
+	upgradeClient.PostRenderer = withDuplicateResourceValidation(cfg.PostRenderer, c.actionConfig.KubeClient)
 
 	chart, err := c.loadChart(ctx, chartRef, c.buildGetterOpts(cfg.ActionConfig))
 	if err != nil {
@@ -244,6 +245,7 @@ func (c *client) install(ctx context.Context, namespace, releaseName, chartRef s
 
 	installClient := action.NewInstall(actionConfig)
 	applyInstallConfig(installClient, releaseName, namespace, cfg)
+	installClient.PostRenderer = withDuplicateResourceValidation(cfg.PostRenderer, actionConfig.KubeClient)
 
 	chart, err := c.loadChart(ctx, chartRef, c.buildGetterOpts(cfg.ActionConfig))
 	if err != nil {
