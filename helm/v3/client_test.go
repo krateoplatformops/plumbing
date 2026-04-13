@@ -6,13 +6,20 @@ package helm
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	xenv "github.com/krateoplatformops/plumbing/env"
 	helmconfig "github.com/krateoplatformops/plumbing/helm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/chartutil"
 
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -26,6 +33,8 @@ var (
 	clusterName string
 	namespace   string
 )
+
+const duplicateResourcesChartDir = "testdata/charts/duplicate-resources"
 
 func TestMain(m *testing.M) {
 	xenv.SetTestMode(true)
@@ -43,6 +52,148 @@ func TestMain(m *testing.M) {
 	)
 
 	os.Exit(testenv.Run(m))
+}
+
+func cloneChartFixture(t *testing.T, srcDir string, mutate func(relPath string, data []byte) []byte) string {
+	t.Helper()
+
+	dstDir := t.TempDir()
+
+	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+
+		targetPath := filepath.Join(dstDir, relPath)
+		if info.IsDir() {
+			return os.MkdirAll(targetPath, 0o755)
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		if mutate != nil {
+			data = mutate(relPath, data)
+		}
+
+		return os.WriteFile(targetPath, data, 0o644)
+	})
+	if err != nil {
+		t.Fatalf("copy chart fixture: %v", err)
+	}
+
+	return dstDir
+}
+
+func chartArchiveURL(t *testing.T, chartDir string) string {
+	t.Helper()
+
+	ch, err := loader.LoadDir(chartDir)
+	if err != nil {
+		t.Fatalf("load chart from %s: %v", chartDir, err)
+	}
+
+	archiveDir := t.TempDir()
+	archivePath, err := chartutil.Save(ch, archiveDir)
+	if err != nil {
+		t.Fatalf("package chart from %s: %v", chartDir, err)
+	}
+
+	server := httptest.NewServer(http.FileServer(http.Dir(archiveDir)))
+	t.Cleanup(server.Close)
+
+	return server.URL + "/" + filepath.Base(archivePath)
+}
+
+func duplicateResourcesChartURL(t *testing.T) string {
+	t.Helper()
+
+	return chartArchiveURL(t, duplicateResourcesChartDir)
+}
+
+func cleanDuplicateResourcesChartURL(t *testing.T) string {
+	t.Helper()
+
+	cleanChartDir := cloneChartFixture(t, duplicateResourcesChartDir, func(relPath string, data []byte) []byte {
+		if relPath == filepath.Join("templates", "deployment-2.yaml") {
+			return []byte(strings.ReplaceAll(string(data), "{{ .Chart.Name }}", "{{ .Chart.Name }}-2"))
+		}
+		return data
+	})
+
+	return chartArchiveURL(t, cleanChartDir)
+}
+
+func TestDuplicateResourcesInstallAndUpgrade(t *testing.T) {
+	os.Setenv("DEBUG", "0")
+
+	f := features.New("Duplicate resources on install and upgrade").
+		Assess("Install the duplicate chart and then upgrade into it", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			cli, err := NewClient(c.Client().RESTConfig(),
+				WithCache(),
+				WithNamespace(namespace),
+			)
+			require.NoError(t, err)
+			defer cli.Close()
+
+			values := map[string]interface{}{
+				"replicaCount": 1,
+				"image": map[string]interface{}{
+					"repository": "nginx",
+					"pullPolicy": "IfNotPresent",
+					"tag":        "1.14.2",
+				},
+			}
+
+			duplicateChartURL := duplicateResourcesChartURL(t)
+			seedChartURL := cleanDuplicateResourcesChartURL(t)
+
+			failedInstallRelease := "duplicate-resources-install"
+			defer func() {
+				_ = cli.Uninstall(ctx, failedInstallRelease, &helmconfig.UninstallConfig{IgnoreNotFound: true})
+			}()
+
+			_, err = cli.Install(ctx, failedInstallRelease, duplicateChartURL, &helmconfig.InstallConfig{
+				ActionConfig: &helmconfig.ActionConfig{
+					TakeOwnership: true,
+					Values:        values,
+				},
+			})
+			t.Log("Attempted to install duplicate resources chart", err)
+			assert.Error(t, err, "installing the duplicate chart should fail")
+
+			seedRelease := "duplicate-resources-seed"
+			rel, err := cli.Install(ctx, seedRelease, seedChartURL, &helmconfig.InstallConfig{
+				ActionConfig: &helmconfig.ActionConfig{
+					TakeOwnership: true,
+					Values:        values,
+				},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, rel)
+			defer func() {
+				_ = cli.Uninstall(ctx, seedRelease, &helmconfig.UninstallConfig{IgnoreNotFound: true})
+			}()
+
+			_, err = cli.Upgrade(ctx, seedRelease, duplicateChartURL, &helmconfig.UpgradeConfig{
+				ActionConfig: &helmconfig.ActionConfig{
+					Values: values,
+				},
+			})
+			assert.Error(t, err, "upgrading to the duplicate chart should fail")
+
+			return ctx
+		}).
+		Feature()
+
+	testenv.Test(t, f)
 }
 
 func TestInstallAndUninstall_OCI(t *testing.T) {
