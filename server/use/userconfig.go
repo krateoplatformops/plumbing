@@ -16,9 +16,21 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func UserConfig(signingKey, authnNS string) func(http.Handler) http.Handler {
+// UserConfig builds a middleware that validates the incoming bearer token.
+// publicKeyPEM is the PEM-encoded RSA public key (the public half of the
+// keypair authn signs with) used to verify token signatures. The key is parsed
+// once here, not per request; a parse failure is surfaced on every request as
+// an internal error so the misconfiguration is obvious.
+func UserConfig(publicKeyPEM, authnNS string) func(http.Handler) http.Handler {
+	publicKey, keyErr := jwtutil.ParseRSAPublicKeyFromPEM([]byte(publicKeyPEM))
+
 	return func(next http.Handler) http.Handler {
 		fn := func(wri http.ResponseWriter, req *http.Request) {
+			if keyErr != nil {
+				response.InternalError(wri, fmt.Errorf("unable to parse JWT public key: %w", keyErr))
+				return
+			}
+
 			authHeader := req.Header.Get("Authorization")
 			if authHeader == "" {
 				response.Unauthorized(wri, fmt.Errorf("missing authorization header"))
@@ -31,7 +43,7 @@ func UserConfig(signingKey, authnNS string) func(http.Handler) http.Handler {
 				return
 			}
 
-			userInfo, err := jwtutil.Validate(signingKey, parts[1])
+			userInfo, err := jwtutil.Validate(publicKey, parts[1])
 			if err != nil {
 				if errors.Is(err, jwtutil.ErrTokenExpired) {
 					response.Unauthorized(wri, err)
