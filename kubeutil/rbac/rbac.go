@@ -238,11 +238,22 @@ func resolveUserEndpoint(ctx context.Context) (endpoints.Endpoint, bool) {
 	return ep, true
 }
 
+// Client-side rate limit for the per-request user clientset. client-go defaults
+// to 5 QPS / burst 10, which throttles UserCan to (namespaces-10)/5 seconds since
+// it issues one SelfSubjectRulesReview per namespace. The API server applies its
+// own priority and fairness, so the client-side limit can safely be raised.
+const (
+	userClientQPS   = 100
+	userClientBurst = 200
+)
+
 func newUserClientset(ctx context.Context, ep endpoints.Endpoint) (*kubernetes.Clientset, error) {
 	rc, err := kubeconfig.NewClientConfig(ctx, ep)
 	if err != nil {
 		return nil, err
 	}
+	rc.QPS = userClientQPS
+	rc.Burst = userClientBurst
 	return kubernetes.NewForConfig(rc)
 }
 
